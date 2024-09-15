@@ -27,5 +27,75 @@ Photo strips are uploaded to the photostrips folder, organized in subfolders lab
 Templates
 All templates are stored here as png files
 
-## API:
+## API
+
+## Table of Contents
+1. [Installation](#installation)
+2. [Usage](#usage)
+3. [API Endpoints](#api-endpoints)
+4. [File Structure](#file-structure)
+5. [Dependencies](#dependencies)
+
+## Installation
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/pinaple12/boothd-printing/
+   ```
+
+2. Install the required dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+3. Set up your Supabase credentials in `strip_creation.py`:
+   ```python
+   url: str = 'https://fxpfrvfpgjqyermtbtwu.supabase.co'
+   key: str = 'YOUR-SECRET-KEY'
+   ```
+
+## Usage
+
+Run the Flask application:
+
+```
+python app.py
+```
+
+The server will start, and you can access the API endpoints.
+
+## API Endpoints
+
+### 1. Create Strip
+
+- **URL:** `/createStrip`
+- **Method:** POST
+- **Description:** Constructs a photo strip and uploads it to Supabase.
+- **Parameters:**
+  - `stripId` (string): ID of the strip
+  - `templateId` (string): ID of the template
+  - `eventName` (string): Name of the event being served
+- **Response:** 
+  - Success: 200 OK with a success message
+  - Error: 400 Bad Request or 500 Internal Server Error with an error message
+
+## File Structure
+
+- `app.py`: Main Flask application file
+- `strip_creation.py`: Contains the `stripConstruction` function for creating and uploading photo strips
+- `util.py`: Utility functions for image processing
+
+## Dependencies
+
+- Flask
+- Supabase Python Client
+- OpenCV (cv2)
+- NumPy
+
+Make sure to install these dependencies using the `requirements.txt` file.
+
+## Note
+
+Ensure that you have the necessary permissions and access to the Supabase project. Replace the `SECRET-KEY` in `strip_creation.py` with your actual Supabase key before running the application.
+
 
