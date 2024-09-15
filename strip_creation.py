@@ -85,7 +85,7 @@ def stripConstruction(stripId, templateId, eventName):
             .download(templateInfo['image_url'])
         )
     except:
-        return {"code" : 400, "msg" : f'Failed to find valid photo template under image name {templateInfo['image_url']}'}
+        return {"code": 400, "msg": f"Failed to find valid photo template under image name {templateInfo['image_url']}"}
     
     #turn it into a cv2 object
     nparr = np.frombuffer(templateRaw, np.uint8)
