@@ -25,6 +25,7 @@ Raw photos are uploaded to the raw folder, organized in subfolders labeled by ev
 Photo strips are uploaded to the photostrips folder, organized in subfolders labeled by event name
 
 Templates
+
 All templates are stored here as png files
 
 ## API
