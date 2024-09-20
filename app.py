@@ -1,15 +1,14 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from strip_creation import stripConstruction
 from flask_cors import CORS
 import gphoto2 as gp
 import os
 import threading
 import time
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 import io
 import cups
 import tempfile
-
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -21,47 +20,11 @@ camera_lock = threading.Lock()
 photo_in_progress = False
 photo_lock = threading.Lock()
 
-
-'''
-stripId - string representation of strip id
-templateId - string representation of template name
-eventName - name of event being served
-
-This route constructs a photostrip and uploads it to the supabase with a given stripId, templateId, and eventName
-'''
-@app.post("/createStrip")
-def stripCreation():
-    stripId = request.form.get('stripId')
-    templateId = request.form.get('templateId')
-    eventName = request.form.get('eventName')
-
-    #make sure all 3 were supplied
-    if stripId is None or templateId is None or eventName is None:
-        return "Missing one of stripId, templateId, or eventName", 400
-    
-    #try converting stripId and templateId into integers
-    try:
-        stripId = int(stripId)
-        templateId = int(templateId)
-    except ValueError:
-        return "stripId and templateId must be integers", 400
-
-    #constructs the strip
-    resp = stripConstruction(stripId, templateId, eventName)
-
-    #make sure we received a valid response
-    if 'msg' not in resp or 'code' not in resp:
-        return "Internal error: Invalid response from stripConstruction", 500
-
-    return resp["msg"], resp['code']
-
-    
 def set_live_view_mode():
     config = camera.get_config()
     
-    # Settings to adjust for clean live view
     settings_to_adjust = {
-        'output': 'TFT + PCtf',
+        'output': 'TFT',
         'evfmode': 1
     }
     
@@ -111,7 +74,6 @@ def autofocus():
         print("Attempting to autofocus...")
         config = camera.get_config()
         
-        # Try to find and trigger autofocus
         for section in config.get_children():
             for child in section.get_children():
                 if 'autofocus' in child.get_name().lower():
@@ -207,6 +169,28 @@ def home():
 def test():
     return "hey this is a test"
 
+@app.post("/createStrip")
+def stripCreation():
+    stripId = request.form.get('stripId')
+    templateId = request.form.get('templateId')
+    eventName = request.form.get('eventName')
+
+    if stripId is None or templateId is None or eventName is None:
+        return "Missing one of stripId, templateId, or eventName", 400
+    
+    try:
+        stripId = int(stripId)
+        templateId = int(templateId)
+    except ValueError:
+        return "stripId and templateId must be integers", 400
+
+    resp = stripConstruction(stripId, templateId, eventName)
+
+    if 'msg' not in resp or 'code' not in resp:
+        return "Internal error: Invalid response from stripConstruction", 500
+
+    return resp["msg"], resp['code']
+
 def process_uploaded_images(request):
     images = []
     for i in range(3):
@@ -226,46 +210,38 @@ def process_uploaded_images(request):
     return images, None
 
 def create_photobooth_strip(images):
-    # 4x6 inches at 300 DPI
     full_width = 4 * 300
     full_height = 6 * 300
-    
-    # Each strip is 2x6 inches
     strip_width = 2 * 300
     strip_height = full_height
     single_image_height = strip_height // 3
 
-    # Create a white background
     full_image = Image.new('RGB', (full_width, full_height), color='white')
 
-    for strip_index in range(2):  # Create two strips
+    for strip_index in range(2):
         strip = Image.new('RGB', (strip_width, strip_height), color='white')
         
         for i, img in enumerate(images):
-            # Resize image to cover the strip width while maintaining aspect ratio
             img_ratio = img.width / img.height
             strip_ratio = strip_width / single_image_height
 
-            if img_ratio > strip_ratio:  # Image is wider
+            if img_ratio > strip_ratio:
                 new_height = single_image_height
                 new_width = int(new_height * img_ratio)
-            else:  # Image is taller
+            else:
                 new_width = strip_width
                 new_height = int(new_width / img_ratio)
 
             img_resized = img.resize((new_width, new_height), Image.LANCZOS)
 
-            # Crop to fit
             left = (new_width - strip_width) // 2
             top = (new_height - single_image_height) // 2
             right = left + strip_width
             bottom = top + single_image_height
             img_cropped = img_resized.crop((left, top, right, bottom))
 
-            # Paste onto strip
             strip.paste(img_cropped, (0, i * single_image_height))
         
-        # Paste the strip onto the full image
         full_image.paste(strip, (strip_index * strip_width, 0))
 
     return full_image
@@ -286,7 +262,6 @@ def print_image(image_data, paper_size):
     job_id = conn.printFile(printer_name, temp_filename, "Photobooth Print", options)
     
     return job_id
-
 
 @app.route('/print_photobooth', methods=['POST'])
 def print_photobooth():
@@ -324,4 +299,11 @@ def cleanup():
             camera = None
 
 import atexit
-atexit.register(cleanup)    
+atexit.register(cleanup)
+
+# Initialize the camera when the app starts
+with camera_lock:
+    initialize_camera()
+
+if __name__ == '__main__':
+    app.run(debug=False)
