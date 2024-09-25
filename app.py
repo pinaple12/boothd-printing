@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory, send_file
+import util
 from strip_creation import stripConstruction
 from flask_cors import CORS
 import gphoto2 as gp
@@ -9,6 +10,7 @@ from PIL import Image
 import io
 import cups
 import tempfile
+
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -53,6 +55,7 @@ def set_live_view_mode():
         print(f"Error applying settings: {str(e)}")
         return False
 
+#intiializes camera
 def initialize_camera():
     global camera
     try:
@@ -69,6 +72,7 @@ def initialize_camera():
         print(f"Error initializing camera: {error}")
         camera = None
 
+#focuses with camera
 def autofocus():
     try:
         print("Attempting to autofocus...")
@@ -90,6 +94,7 @@ def autofocus():
     except gp.GPhoto2Error as error:
         print(f"Error during autofocus: {error}")
 
+#takes photos
 def take_photo_with_fallback():
     try:
         autofocus()
@@ -169,11 +174,13 @@ def home():
 def test():
     return "hey this is a test"
 
+
 @app.post("/createStrip")
 def stripCreation():
+    #if not provided, they should be from request object in route
     stripId = request.form.get('stripId')
     templateId = request.form.get('templateId')
-    eventName = request.form.get('eventName')
+    eventName = request.form.get('eventName')    
 
     if stripId is None or templateId is None or eventName is None:
         return "Missing one of stripId, templateId, or eventName", 400
@@ -190,24 +197,6 @@ def stripCreation():
         return "Internal error: Invalid response from stripConstruction", 500
 
     return resp["msg"], resp['code']
-
-def process_uploaded_images(request):
-    images = []
-    for i in range(3):
-        image_file = request.files.get(f'image{i+1}')
-        if image_file:
-            try:
-                img = Image.open(io.BytesIO(image_file.read()))
-                images.append(img)
-            except IOError:
-                return None, f'Error processing image {i+1}'
-        else:
-            return None, f'Image {i+1} is missing'
-    
-    if len(images) != 3:
-        return None, 'Exactly 3 images are required'
-    
-    return images, None
 
 def create_photobooth_strip(images):
     full_width = 4 * 300
@@ -265,11 +254,29 @@ def print_image(image_data, paper_size):
 
 @app.route('/print_photobooth', methods=['POST'])
 def print_photobooth():
-    images, error = process_uploaded_images(request)
+
+    #receives the images
+    images, error = util.process_uploaded_images(request)
+
     if error:
         return jsonify({'error': error}), 400
+
+    #gets photobooth id from request
+    photoBoothId = request.form.get('photoboothId')
+
+    templateId, eventName, sessionId = util.findTemplate(photoBoothId)
+    stripId = util.generateStripId()
+
+
+    constructionResponse = stripConstruction(stripId, images, templateId, eventName, sessionId)
+
+    if constructionResponse["code"] == 400:
+        return jsonify({'error': f'Strip construction failed: {constructionResponse["msg"]}'}), 500
     
-    strip = create_photobooth_strip(images)
+    #Turn encoded image into a PIL Image
+    stripBytes = constructionResponse["data"].tobytes()
+    stripBuffer = io.BytesIO(stripBytes)
+    strip = Image.open(stripBuffer)
     
     try:
         job_id = print_image(strip, "2x6*2")

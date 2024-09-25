@@ -19,52 +19,12 @@ Returns:
     {code: 200, msg : "Success"}
     {code : 400, msg : "Descriptive Error Messsage"}
 '''
-def stripConstruction(stripId, templateId, eventName):
-
-    #array of photos to be put in the strip
-    photos = []
-    photoNames = []
+#new plan: i have an array of photos, a templateId, and an eventName
+#i will everything to supabase
+def stripConstruction(stripId, photos, templateId, eventName, sessionId):
 
     #assigned filename to be uploaded as
-    fileName = ''
-
-    #query supabase for raw photos under stripId
-    try:
-        photoQueryResponse = (
-                supabase.table('photo_strips')
-                .select('raw_photos', 'image_url')
-                .eq('id', stripId)
-                .execute()
-            )
-    except:
-        return {"code" : 400, "msg" : f'Failed to fetch stripId {stripId} from photo_strips in supabase'}
-    
-
-    if photoQueryResponse.count == 0:
-        return {"code" : 400, "msg" : f'Failed to find valid photos under stripId {stripId} from photo_strips in supabase'}
-    #get filena
-
-    #gather assigned photostrip filename and all photo names to fetch from storage
-    for response in photoQueryResponse.data:
-        fileName = response['image_url']
-        photoNames += response['raw_photos']
-
-    #construct photo array with photos from storage
-    for name in photoNames:
-        try:
-            photoRaw = (
-                supabase.storage
-                .from_(f'photos/raw/{eventName}')
-                .download(name)
-            )
-        except:
-            return {"code" : 400, "msg" : f'Failed to find valid photo under name {name} in event {eventName}'}
-        #convert bytes into cv2 compatible photos
-        nparr = np.frombuffer(photoRaw, np.uint8)
-        photo = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        #add to photo array
-        photos.append(photo)
+    fileName = f'{stripId}'
 
     #retrieve template information from templateId
     try:
@@ -112,10 +72,41 @@ def stripConstruction(stripId, templateId, eventName):
             .upload(file=stripFile.tobytes(), path=f'strips/{eventName}/{fileName}', file_options={"content-type" : "image/png"})
          )
     except:
-        return {"code" : 400, "msg" : "Upload failure"}
+        return {"code" : 400, "msg" : "Strip upload failure"}
     
-    return {"code" : 200, "msg" : "Success"}
+    #array for saving photo names to upload
+    photo_names = []
+    for count, photo in enumerate(photos):
+        #prepare photos for saving
+        photo_name = str(stripId) + '_' + str(count)
+        photo_names.append(photo_name)
+        success, photoFile = cv2.imencode(".png", photo)
+        try:
+            (
+                supabase.storage
+                .from_('photos')
+                .upload(file=photoFile.tobytes(), path=f'raw/{eventName}/{photo_name}', file_options={"content-type" : "image/png"})
+            )
+        except Exception as e:
+            print(e)
+            return {"code" : 400, "msg" : "Photo upload failure"}
+        
+    try:
+        (
+            supabase.table("photo_strips")
+            .insert({"id" : stripId, "session_id" : sessionId, "image_url" : fileName, "raw_photos" : photo_names})
+            .execute()
+        )
+    except Exception as e:
+        print(e)
+        return{"code" : 400, "msg" : "Failed to insert into photo strips"}
+
+    
+    return {"code" : 200, "msg" : "Success", "data" : stripFile}
     
 
 #HARD CODED VARIABLES FOR TESTING:
 #print(stripConstruction(1, 1, "test"))
+
+pics = util.generate_white_blocks()
+print(stripConstruction(2, pics, 1, "test", 1))
