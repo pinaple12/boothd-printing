@@ -1,4 +1,9 @@
 import cv2
+import numpy as np
+from supabase import create_client, Client
+url: str = 'https://fxpfrvfpgjqyermtbtwu.supabase.co'
+key: str = 'SECRET-KEY'
+supabase: Client = create_client(url, key)
 
 '''
 template - cv2 image object containing photo strip template
