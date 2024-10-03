@@ -11,7 +11,6 @@ import io
 import cups
 import tempfile
 
-
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 SAVE_DIRECTORY = os.path.expanduser("~/photobooth_flask_app")
@@ -24,19 +23,19 @@ photo_lock = threading.Lock()
 
 def set_live_view_mode():
     config = camera.get_config()
-    
+
     settings_to_adjust = {
         'output': 'TFT',
         'evfmode': 1
     }
-    
+
     for setting_name, desired_value in settings_to_adjust.items():
         try:
             setting = config.get_child_by_name(setting_name)
             if setting:
                 current_value = setting.get_value()
                 print(f"Current {setting_name}: {current_value}")
-                
+
                 if str(current_value) != str(desired_value):
                     setting.set_value(desired_value)
                     print(f"Setting {setting_name} to {desired_value}")
@@ -46,7 +45,7 @@ def set_live_view_mode():
                 print(f"Setting {setting_name} not found")
         except gp.GPhoto2Error as e:
             print(f"Error setting {setting_name}: {str(e)}")
-    
+
     try:
         camera.set_config(config)
         print("Applied new settings to camera")
@@ -62,12 +61,12 @@ def initialize_camera():
         camera = gp.Camera()
         camera.init()
         print("Camera initialized successfully")
-        
+
         if set_live_view_mode():
             print("Attempted to set clean live view mode")
         else:
             print("Failed to set clean live view mode. On-screen display might still be visible.")
-        
+
     except gp.GPhoto2Error as error:
         print(f"Error initializing camera: {error}")
         camera = None
@@ -77,7 +76,7 @@ def autofocus():
     try:
         print("Attempting to autofocus...")
         config = camera.get_config()
-        
+
         for section in config.get_children():
             for child in section.get_children():
                 if 'autofocus' in child.get_name().lower():
@@ -86,7 +85,7 @@ def autofocus():
                     time.sleep(2)  # Give the camera time to focus
                     print(f"Autofocus triggered using {child.get_name()}")
                     return
-        
+
         print("No specific autofocus setting found. Trying generic capture...")
         camera.capture(gp.GP_CAPTURE_PREVIEW)
         time.sleep(2)  # Give the camera time to adjust
@@ -120,12 +119,12 @@ def take_photo_with_fallback():
 
 def take_photo():
     global photo_in_progress, camera
-    
+
     with photo_lock:
         if photo_in_progress:
             return None
         photo_in_progress = True
-    
+
     try:
         with camera_lock:
             if camera is None:
@@ -134,17 +133,17 @@ def take_photo():
                 return None
             print('Taking a photo...')
             file_path = take_photo_with_fallback()
-        
+
         full_path = os.path.join(SAVE_DIRECTORY, file_path.name)
-        
+
         if not os.path.exists(SAVE_DIRECTORY):
             os.makedirs(SAVE_DIRECTORY)
-        
+
         with camera_lock:
             camera_file = camera.file_get(file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL)
         camera_file.save(full_path)
         print(f'Photo saved as {full_path}')
-        
+
         return file_path.name
     except gp.GPhoto2Error as error:
         print(f"Error taking photo: {error}")
@@ -160,14 +159,14 @@ def home():
     if photo_in_progress:
         return jsonify({'error': 'Photo already in progress. Please wait.'}), 429
     photo_filename = take_photo()
-    
+
     if photo_filename is None:
         return jsonify({'error': 'Failed to take photo. Please try again later.'}), 503
     response = send_from_directory(SAVE_DIRECTORY, photo_filename)
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
-    
+
     return response
 
 @app.route('/test')
@@ -180,11 +179,11 @@ def stripCreation():
     #if not provided, they should be from request object in route
     stripId = request.form.get('stripId')
     templateId = request.form.get('templateId')
-    eventName = request.form.get('eventName')    
+    eventName = request.form.get('eventName')
 
     if stripId is None or templateId is None or eventName is None:
         return "Missing one of stripId, templateId, or eventName", 400
-    
+
     try:
         stripId = int(stripId)
         templateId = int(templateId)
@@ -209,7 +208,7 @@ def create_photobooth_strip(images):
 
     for strip_index in range(2):
         strip = Image.new('RGB', (strip_width, strip_height), color='white')
-        
+
         for i, img in enumerate(images):
             img_ratio = img.width / img.height
             strip_ratio = strip_width / single_image_height
@@ -230,7 +229,7 @@ def create_photobooth_strip(images):
             img_cropped = img_resized.crop((left, top, right, bottom))
 
             strip.paste(img_cropped, (0, i * single_image_height))
-        
+
         full_image.paste(strip, (strip_index * strip_width, 0))
 
     return full_image
@@ -238,18 +237,18 @@ def create_photobooth_strip(images):
 def print_image(image_data, paper_size):
     conn = cups.Connection()
     printer_name = "Dai_Nippon_Printing_DS-RX1"
-    
+
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
         temp_filename = temp_file.name
         image_data.save(temp_filename, format="JPEG")
-    
+
     options = {
         "media": paper_size,
         "fit-to-page": "True"
     }
-    
+
     job_id = conn.printFile(printer_name, temp_filename, "Photobooth Print", options)
-    
+
     return job_id
 
 @app.route('/print_photobooth', methods=['POST'])
@@ -272,12 +271,12 @@ def print_photobooth():
 
     if constructionResponse["code"] == 400:
         return jsonify({'error': f'Strip construction failed: {constructionResponse["msg"]}'}), 500
-    
+
     #Turn encoded image into a PIL Image
     stripBytes = constructionResponse["data"].tobytes()
     stripBuffer = io.BytesIO(stripBytes)
     strip = Image.open(stripBuffer)
-    
+
     try:
         job_id = print_image(strip, "2x6*2")
         return jsonify({'message': 'Print job submitted', 'job_id': job_id}), 200
@@ -286,17 +285,33 @@ def print_photobooth():
 
 @app.route('/test_photobooth_strip', methods=['POST'])
 def test_photobooth_strip():
-    images, error = process_uploaded_images(request)
+    images, error = util.process_uploaded_images(request)  # Use the same util function for processing
     if error:
         return jsonify({'error': error}), 400
-    
-    strip = create_photobooth_strip(images)
-    
+
+    # Generate the photobooth strip
+    photoBoothId = request.form.get('photoboothId')
+    templateId, eventName, sessionId = util.findTemplate(photoBoothId)
+    stripId = util.generateStripId()
+
+    constructionResponse = stripConstruction(stripId, images, templateId, eventName, sessionId)
+
+    if constructionResponse["code"] == 400:
+        return jsonify({'error': f'Strip construction failed: {constructionResponse["msg"]}'}), 500
+
+    # Turn encoded image into a PIL Image
+    stripBytes = constructionResponse["data"].tobytes()
+    stripBuffer = io.BytesIO(stripBytes)
+    strip = Image.open(stripBuffer)
+
+    # Save image into BytesIO to send as a response
     img_io = io.BytesIO()
     strip.save(img_io, 'JPEG', quality=70)
     img_io.seek(0)
-    
+
+    # Return the image file instead of printing
     return send_file(img_io, mimetype='image/jpeg')
+
 
 def cleanup():
     global camera

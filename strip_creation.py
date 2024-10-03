@@ -4,9 +4,14 @@ import numpy as np
 import io
 import util
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv('.env.local')
+
 #credentials
 url: str = 'https://fxpfrvfpgjqyermtbtwu.supabase.co'
-key: str = 'SECRET-KEY'
+key: str = os.getenv('KEY')
 supabase: Client = create_client(url, key)
 
 '''
@@ -36,9 +41,9 @@ def stripConstruction(stripId, photos, templateId, eventName, sessionId):
         ).data[0]
     except:
         return {"code" : 400, "msg" : f'Failed to find valid photo template under id {templateId}'}
-    
+
     #retrieve template from storage
-    try: 
+    try:
         templateRaw = (
             supabase.storage
             .from_('templates')
@@ -46,7 +51,7 @@ def stripConstruction(stripId, photos, templateId, eventName, sessionId):
         )
     except:
         return {"code": 400, "msg": f"Failed to find valid photo template under image name {templateInfo['image_url']}"}
-    
+
     #turn it into a cv2 object
     nparr = np.frombuffer(templateRaw, np.uint8)
     template = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -73,7 +78,7 @@ def stripConstruction(stripId, photos, templateId, eventName, sessionId):
          )
     except:
         return {"code" : 400, "msg" : "Strip upload failure"}
-    
+
     #array for saving photo names to upload
     photo_names = []
     for count, photo in enumerate(photos):
@@ -90,7 +95,7 @@ def stripConstruction(stripId, photos, templateId, eventName, sessionId):
         except Exception as e:
             print(e)
             return {"code" : 400, "msg" : "Photo upload failure"}
-        
+
     try:
         (
             supabase.table("photo_strips")
@@ -101,9 +106,9 @@ def stripConstruction(stripId, photos, templateId, eventName, sessionId):
         print(e)
         return{"code" : 400, "msg" : "Failed to insert into photo strips"}
 
-    
+
     return {"code" : 200, "msg" : "Success", "data" : stripFile}
-    
+
 
 #HARD CODED VARIABLES FOR TESTING:
 #print(stripConstruction(1, 1, "test"))

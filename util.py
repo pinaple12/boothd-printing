@@ -1,8 +1,14 @@
 import cv2
 import numpy as np
 from supabase import create_client, Client
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv('.env.local')
+
 url: str = 'https://fxpfrvfpgjqyermtbtwu.supabase.co'
-key: str = 'SECRET-KEY'
+key: str = os.getenv('KEY')
 supabase: Client = create_client(url, key)
 
 '''
@@ -21,7 +27,7 @@ def findTemplate(photoBoothId):
         supabase.table('photoshoot_sessions')
         .select('template_id, event_name', 'id')
         .eq('photobooth_id', photoBoothId)
-        .order('session_time', desc=True) 
+        .order('session_time', desc=True)
         .limit(1)
         .execute()
     ).data[0]
@@ -56,10 +62,10 @@ def process_uploaded_images(request):
                 return None, f'Error processing image {i+1}: {str(e)}'
         else:
             return None, f'Image {i+1} is missing'
-    
+
     if len(images) != 3:
         return None, 'Exactly 3 images are required'
-    
+
     return images, None
 
 def create_strip(template, imgs, positions, photoWidth, photoHeight):
@@ -68,7 +74,7 @@ def create_strip(template, imgs, positions, photoWidth, photoHeight):
 
     target_ratio = photoWidth / photoHeight
 
-    for i, img in enumerate(imgs): 
+    for i, img in enumerate(imgs):
         # image is too wide, resize based on height and crop width
         if aspect_ratio > target_ratio:
             new_height = photoHeight
@@ -100,10 +106,10 @@ def generate_white_blocks():
     images = []
     width = 300  # Example width
     height = int(width * 2 / 3)  # Aspect ratio 3:2
-    
+
     for _ in range(3):
         # Create a white block with the specified width and height
         white_block = np.ones((height, width, 3), dtype=np.uint8) * 255  # 3-channel white image (RGB)
         images.append(white_block)
-    
+
     return images
