@@ -251,37 +251,64 @@ def print_image(image_data, paper_size):
 
     return job_id
 
-@app.route('/print_photobooth', methods=['POST'])
-def print_photobooth():
+# Background task to handle strip construction and printing
+def background_process(stripId, images, templateId, eventName, sessionId):
+    print(f"[INFO] Background process started for stripId: {stripId}")
 
-    #receives the images
-    images, error = util.process_uploaded_images(request)
-
-    if error:
-        return jsonify({'error': error}), 400
-
-    #gets photobooth id from request
-    photoBoothId = request.form.get('photoboothId')
-
-    templateId, eventName, sessionId = util.findTemplate(photoBoothId)
-    stripId = util.generateStripId()
-
-
+    # Construct the photobooth strip
+    print(f"[INFO] Constructing photobooth strip for event: {eventName}, session: {sessionId}")
     constructionResponse = stripConstruction(stripId, images, templateId, eventName, sessionId)
 
     if constructionResponse["code"] == 400:
-        return jsonify({'error': f'Strip construction failed: {constructionResponse["msg"]}'}), 500
+        print(f"[ERROR] Strip construction failed: {constructionResponse['msg']}")
+        return
 
-    #Turn encoded image into a PIL Image
+    # Turn encoded image into a PIL Image
+    print(f"[INFO] Converting constructed strip to image for stripId: {stripId}")
     stripBytes = constructionResponse["data"].tobytes()
     stripBuffer = io.BytesIO(stripBytes)
     strip = Image.open(stripBuffer)
 
     try:
+        # Submit the print job
+        print(f"[INFO] Sending strip to print for stripId: {stripId}")
         job_id = print_image(strip, "2x6*2")
-        return jsonify({'message': 'Print job submitted', 'job_id': job_id}), 200
+        print(f"[SUCCESS] Print job submitted with job_id: {job_id}")
     except Exception as e:
-        return jsonify({'error': f'Printing failed: {str(e)}'}), 500
+        print(f"[ERROR] Printing failed for stripId: {stripId} - {str(e)}")
+
+
+@app.route('/print_photobooth', methods=['POST'])
+def print_photobooth():
+    print("[INFO] Received request to print photobooth strip")
+
+    # Receive the images
+    images, error = util.process_uploaded_images(request)
+    if error:
+        print(f"[ERROR] Image processing failed: {error}")
+        return jsonify({'error': error}), 400
+
+    # Get photobooth ID from request
+    photoBoothId = request.form.get('photoboothId')
+    print(f"[INFO] Received photoboothId: {photoBoothId}")
+
+    # Generate strip ID
+    stripId = util.generateStripId()
+    print(f"[INFO] Generated stripId: {stripId}")
+
+    # Send strip ID back immediately to the client
+    response = jsonify({'message': 'Strip ID generated, processing continues in background', 'strip_id': stripId})
+    response.status_code = 202
+
+    # Start the background process for constructing and printing the strip
+    print(f"[INFO] Starting background process for stripId: {stripId}")
+    templateId, eventName, sessionId = util.findTemplate(photoBoothId)
+    thread = threading.Thread(target=background_process, args=(stripId, images, templateId, eventName, sessionId))
+    thread.start()
+
+    # Return the response with strip ID right away
+    print(f"[INFO] Response sent with stripId: {stripId}")
+    return response
 
 @app.route('/test_photobooth_strip', methods=['POST'])
 def test_photobooth_strip():
@@ -328,4 +355,4 @@ with camera_lock:
     initialize_camera()
 
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(host='0.0.0.0')
