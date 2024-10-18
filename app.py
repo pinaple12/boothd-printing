@@ -234,7 +234,7 @@ def create_photobooth_strip(images):
 
     return full_image
 
-def print_image(image_data, paper_size):
+def print_image(image_data, paper_size, copies=1):
     conn = cups.Connection()
     printer_name = "Dai_Nippon_Printing_DS-RX1"
 
@@ -244,7 +244,8 @@ def print_image(image_data, paper_size):
 
     options = {
         "media": paper_size,
-        "fit-to-page": "True"
+        "fit-to-page": "True",
+        "copies": str(copies)  # Convert copies to string for CUPS options
     }
 
     job_id = conn.printFile(printer_name, temp_filename, "Photobooth Print", options)
@@ -252,7 +253,7 @@ def print_image(image_data, paper_size):
     return job_id
 
 # Background task to handle strip construction and printing
-def background_process(stripId, images, templateId, eventName, sessionId):
+def background_process(stripId, images, templateId, eventName, sessionId, copies):
     print(f"[INFO] Background process started for stripId: {stripId}")
 
     # Construct the photobooth strip
@@ -272,7 +273,7 @@ def background_process(stripId, images, templateId, eventName, sessionId):
     try:
         # Submit the print job
         print(f"[INFO] Sending strip to print for stripId: {stripId}")
-        job_id = print_image(strip, "2x6*2")
+        job_id = print_image(strip, "2x6*2", copies)
         print(f"[SUCCESS] Print job submitted with job_id: {job_id}")
     except Exception as e:
         print(f"[ERROR] Printing failed for stripId: {stripId} - {str(e)}")
@@ -290,6 +291,7 @@ def print_photobooth():
 
     # Get photobooth ID from request
     photoBoothId = request.form.get('photoboothId')
+    copies = request.form.get('copies')
     print(f"[INFO] Received photoboothId: {photoBoothId}")
 
     # Generate strip ID
@@ -303,7 +305,7 @@ def print_photobooth():
     # Start the background process for constructing and printing the strip
     print(f"[INFO] Starting background process for stripId: {stripId}")
     templateId, eventName, sessionId = util.findTemplate(photoBoothId)
-    thread = threading.Thread(target=background_process, args=(stripId, images, templateId, eventName, sessionId))
+    thread = threading.Thread(target=background_process, args=(stripId, images, templateId, eventName, sessionId, copies))
     thread.start()
 
     # Return the response with strip ID right away
