@@ -35,7 +35,7 @@ def findTemplate(photoBoothId):
 
     return templateQueryResponse['template_id'], templateQueryResponse['event_name'], templateQueryResponse['id']
 
-def generateStripId():
+def generateStripId(sessionId):
     idQueryResponse = (
         supabase.table('photo_strips')
         .select('id')
@@ -44,14 +44,14 @@ def generateStripId():
         .execute()
     ).data[0]
     id = idQueryResponse['id'] + 1
-    uuid = generateUuid(id)
+    uuid = generateUuid(id, sessionId)
 
     return id, uuid
 
-def generateUuid(id):
+def generateUuid(id, sessionId):
     uuid = str(uuid_module.uuid4())
     # create empty strip row with id and uuid
-    supabase.table('photo_strips').insert({'id': id, 'uuid': uuid, 'image_url': 'dummy'}).execute()
+    supabase.table('photo_strips').insert({'id': id, 'uuid': uuid, 'image_url': 'dummy', 'session_id': sessionId, 'raw_photos': []}).execute()
     return uuid
 
 def process_uploaded_images(request):

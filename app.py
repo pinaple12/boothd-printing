@@ -294,8 +294,10 @@ def print_photobooth():
     copies = request.form.get('copies')
     print(f"[INFO] Received photoboothId: {photoBoothId}")
 
+    templateId, eventName, sessionId = util.findTemplate(photoBoothId)
+
     # Generate strip ID
-    stripId, uuid = util.generateStripId()
+    stripId, uuid = util.generateStripId(sessionId)
     print(f"[INFO] Generated stripId: {stripId} and UUID: {uuid}")
 
 
@@ -306,7 +308,6 @@ def print_photobooth():
 
     # Start the background process for constructing and printing the strip
     print(f"[INFO] Starting background process for stripId: {stripId}")
-    templateId, eventName, sessionId = util.findTemplate(photoBoothId)
     thread = threading.Thread(target=background_process, args=(stripId, images, templateId, eventName, sessionId, copies, uuid))
     thread.start()
 
