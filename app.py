@@ -253,12 +253,12 @@ def print_image(image_data, paper_size, copies=1):
     return job_id
 
 # Background task to handle strip construction and printing
-def background_process(stripId, images, templateId, eventName, sessionId, copies):
+def background_process(stripId, images, templateId, eventName, sessionId, copies, uuid):
     print(f"[INFO] Background process started for stripId: {stripId}")
 
     # Construct the photobooth strip
     print(f"[INFO] Constructing photobooth strip for event: {eventName}, session: {sessionId}")
-    constructionResponse = stripConstruction(stripId, images, templateId, eventName, sessionId)
+    constructionResponse = stripConstruction(stripId, images, templateId, eventName, sessionId, uuid)
 
     if constructionResponse["code"] == 400:
         print(f"[ERROR] Strip construction failed: {constructionResponse['msg']}")
@@ -295,17 +295,19 @@ def print_photobooth():
     print(f"[INFO] Received photoboothId: {photoBoothId}")
 
     # Generate strip ID
-    stripId = util.generateStripId()
-    print(f"[INFO] Generated stripId: {stripId}")
+    stripId, uuid = util.generateStripId()
+    print(f"[INFO] Generated stripId: {stripId} and UUID: {uuid}")
+
+
 
     # Send strip ID back immediately to the client
-    response = jsonify({'message': 'Strip ID generated, processing continues in background', 'strip_id': stripId})
+    response = jsonify({'message': 'Strip ID generated, processing continues in background', 'uuid': uuid})
     response.status_code = 202
 
     # Start the background process for constructing and printing the strip
     print(f"[INFO] Starting background process for stripId: {stripId}")
     templateId, eventName, sessionId = util.findTemplate(photoBoothId)
-    thread = threading.Thread(target=background_process, args=(stripId, images, templateId, eventName, sessionId, copies))
+    thread = threading.Thread(target=background_process, args=(stripId, images, templateId, eventName, sessionId, copies, uuid))
     thread.start()
 
     # Return the response with strip ID right away
@@ -357,4 +359,5 @@ with camera_lock:
     initialize_camera()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0')
+#     app.run(host='0.0.0.0')
+    app.run(port=5001)

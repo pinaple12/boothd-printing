@@ -26,7 +26,7 @@ Returns:
 '''
 #new plan: i have an array of photos, a templateId, and an eventName
 #i will everything to supabase
-def stripConstruction(stripId, photos, templateId, eventName, sessionId):
+def stripConstruction(stripId, photos, templateId, eventName, sessionId, uuid):
 
     #assigned filename to be uploaded as
     fileName = f'{stripId}'
@@ -99,7 +99,7 @@ def stripConstruction(stripId, photos, templateId, eventName, sessionId):
     try:
         (
             supabase.table("photo_strips")
-            .insert({"id" : stripId, "session_id" : sessionId, "image_url" : fileName, "raw_photos" : photo_names})
+            .upsert({"uuid": uuid, "id" : stripId, "session_id" : sessionId, "image_url" : fileName, "raw_photos" : photo_names})
             .execute()
         )
     except Exception as e:
@@ -113,5 +113,5 @@ def stripConstruction(stripId, photos, templateId, eventName, sessionId):
 #HARD CODED VARIABLES FOR TESTING:
 #print(stripConstruction(1, 1, "test"))
 
-pics = util.generate_white_blocks()
-print(stripConstruction(2, pics, 1, "test", 1))
+# pics = util.generate_white_blocks()
+# print(stripConstruction(2, pics, 1, "test", 1))

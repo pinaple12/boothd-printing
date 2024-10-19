@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import uuid as uuid_module
 from supabase import create_client, Client
 
 from dotenv import load_dotenv
@@ -42,9 +43,16 @@ def generateStripId():
         .limit(1)
         .execute()
     ).data[0]
+    id = idQueryResponse['id'] + 1
+    uuid = generateUuid(id)
 
-    return idQueryResponse['id'] + 1
+    return id, uuid
 
+def generateUuid(id):
+    uuid = str(uuid_module.uuid4())
+    # create empty strip row with id and uuid
+    supabase.table('photo_strips').insert({'id': id, 'uuid': uuid, 'image_url': 'dummy'}).execute()
+    return uuid
 
 def process_uploaded_images(request):
     images = []
