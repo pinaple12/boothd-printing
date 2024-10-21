@@ -58,6 +58,7 @@ def set_live_view_mode():
 def initialize_camera():
     global camera
     try:
+        os.system("sudo umount /dev/bus/usb/001/007")
         camera = gp.Camera()
         camera.init()
         print("Camera initialized successfully")
@@ -95,6 +96,15 @@ def autofocus():
 
 #takes photos
 def take_photo_with_fallback():
+    try:
+       config = camera.get_config()
+       flash_mode = config.get_child_by_name('popupflash')
+       if flash_mode:
+            original_flash_mode = flash_mode.get_value()
+            flash_mode.set_value(1)
+            camera.set_config(config)
+    except gp.GPhoto2Error as flash_error:
+        print(f"Unable to configure flash: {flash_error}")
     try:
         autofocus()
         return camera.capture(gp.GP_CAPTURE_IMAGE)
@@ -236,21 +246,36 @@ def create_photobooth_strip(images):
 
 def print_image(image_data, paper_size, copies=1):
     conn = cups.Connection()
-    printer_name = "Dai_Nippon_Printing_DS-RX1"
+    printer_name = "My_DSRX1_Printer"
 
+    # Create a new 4x6 (width x height) image to place two 2x6s side by side
+    new_width = image_data.width * 2  # 2x the width to make it 4x6
+    new_height = image_data.height  # Same height (6 inches)
+
+    # Create a new blank canvas for the 4x6 image
+    new_image = Image.new('RGB', (new_width, new_height), (255, 255, 255))
+
+    # Paste two copies of the original 2x6 image side by side
+    new_image.paste(image_data, (0, 0))  # First 2x6 on the left
+    new_image.paste(image_data, (image_data.width, 0))  # Second 2x6 on the right
+
+    # Save the new 4x6 image to a temporary file
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
         temp_filename = temp_file.name
-        image_data.save(temp_filename, format="JPEG")
+        new_image.save(temp_filename, format="JPEG")
 
+    # Set the print options
     options = {
-        "media": paper_size,
+        "media": paper_size,  # e.g., "4x6"
         "fit-to-page": "True",
         "copies": str(copies)  # Convert copies to string for CUPS options
     }
 
+    # Print the file
     job_id = conn.printFile(printer_name, temp_filename, "Photobooth Print", options)
 
     return job_id
+
 
 # Background task to handle strip construction and printing
 def background_process(stripId, images, templateId, eventName, sessionId, copies, uuid):

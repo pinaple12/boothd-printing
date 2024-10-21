@@ -32,7 +32,7 @@ def findTemplate(photoBoothId):
         .limit(1)
         .execute()
     ).data[0]
-
+    print(templateQueryResponse)
     return templateQueryResponse['template_id'], templateQueryResponse['event_name'], templateQueryResponse['id']
 
 def generateStripId(sessionId):
