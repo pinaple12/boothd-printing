@@ -21,12 +21,30 @@ camera_lock = threading.Lock()
 photo_in_progress = False
 photo_lock = threading.Lock()
 
+def set_camera_setting(setting_name, value):
+    config = gp.check_result(gp.gp_camera_get_config(camera))
+    setting = gp.check_result(gp.gp_widget_get_child_by_name(config, setting_name))
+    gp.check_result(gp.gp_widget_set_value(setting, value))
+    gp.check_result(gp.gp_camera_set_config(camera, config))
+    
+def set_camera_preview_settings():
+    print("")
+    set_camera_setting('aperture', '3.5')
+    set_camera_setting('iso', '4000')
+
+def set_camera_photo_taking_settings():
+    print("")
+    set_camera_setting('aperture', '8')
+    set_camera_setting('iso', '320')
+
 def set_live_view_mode():
     config = camera.get_config()
 
     settings_to_adjust = {
         'output': 'TFT',
-        'evfmode': 1
+        'evfmode': 1,
+        'aperture': '3.5',
+        'iso': '4000'
     }
 
     for setting_name, desired_value in settings_to_adjust.items():
@@ -63,10 +81,10 @@ def initialize_camera():
         camera.init()
         print("Camera initialized successfully")
 
-        if set_live_view_mode():
-            print("Attempted to set clean live view mode")
-        else:
-            print("Failed to set clean live view mode. On-screen display might still be visible.")
+        set_live_view_mode()
+        #    #print("Attempted to set clean live view mode")
+        #else:
+        #    print("Failed to set clean live view mode. On-screen display might still be visible.")
 
     except gp.GPhoto2Error as error:
         print(f"Error initializing camera: {error}")
@@ -74,30 +92,65 @@ def initialize_camera():
 
 #focuses with camera
 def autofocus():
+    time.sleep(2)
     try:
-        print("Attempting to autofocus...")
+        print("Attempting to autofocus and set camera settings...")
         config = camera.get_config()
 
-        for section in config.get_children():
-            for child in section.get_children():
-                if 'autofocus' in child.get_name().lower():
-                    child.set_value(1)
-                    camera.set_config(config)
-                    time.sleep(2)  # Give the camera time to focus
-                    print(f"Autofocus triggered using {child.get_name()}")
-                    return
+        def find_widget(widget, name):
+            if widget.get_name().lower() == name.lower():
+                return widget
+            for child in widget.get_children():
+                result = find_widget(child, name)
+                if result:
+                    return result
+            return None
 
-        print("No specific autofocus setting found. Trying generic capture...")
-        camera.capture(gp.GP_CAPTURE_PREVIEW)
-        time.sleep(2)  # Give the camera time to adjust
-        print("Generic autofocus completed")
-    except gp.GPhoto2Error as error:
-        print(f"Error during autofocus: {error}")
+        # Set aperture to 8
+        aperture_widget = find_widget(config, 'aperture')
+        if aperture_widget:
+            aperture_widget.set_value('8')
+            camera.set_config(config)
+            print("Aperture set to 8")
+        else:
+            print("Aperture setting not found")
+
+        # Set ISO to 320
+        iso_widget = find_widget(config, 'iso')
+        if iso_widget:
+            iso_widget.set_value('320')
+            camera.set_config(config)
+            print("ISO set to 320")
+        else:
+            print("ISO setting not found")
+
+        # Proceed with autofocus as before
+        #autofocus_triggered = False
+        #for section in config.get_children():
+        #    for child in section.get_children():
+        #        if 'autofocus' in child.get_name().lower():
+        #            child.set_value(1)
+        #            camera.set_config(config)
+        #            time.sleep(2)  # Give the camera time to focus
+        #            print(f"Autofocus triggered using {child.get_name()}")
+        #            autofocus_triggered = True
+        #            break
+        #    if autofocus_triggered:
+        #        break
+
+        #if not autofocus_triggered:
+        #    print("No specific autofocus setting found. Trying generic capture...")
+        #    camera.capture(gp.GP_CAPTURE_PREVIEW)
+        #    time.sleep(2)  # Give the camera time to adjust
+        #    print("Generic autofocus completed")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 #takes photos
 def take_photo_with_fallback():
     try:
        config = camera.get_config()
+       #flash_mode = config.get_child_by_name('isosio')
        flash_mode = config.get_child_by_name('popupflash')
        if flash_mode:
             original_flash_mode = flash_mode.get_value()
@@ -117,10 +170,12 @@ def take_photo_with_fallback():
                 original_focus_mode = focus_mode.get_value()
                 focus_mode.set_value('Manual')
                 camera.set_config(config)
+                set_camera_photo_taking_settings()
                 file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
                 focus_mode.set_value(original_focus_mode)
                 camera.set_config(config)
             else:
+                set_camera_photo_taking_settings()
                 file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
             return file_path
         except gp.GPhoto2Error as manual_error:
@@ -163,7 +218,24 @@ def take_photo():
     finally:
         with photo_lock:
             photo_in_progress = False
+            
+def reset_camera_connection():
+    global camera  # Explicitly reference the global camera variable
+    print("Resetting camera connection...")
+    
+    # Close the camera connection
+    gp.gp_camera_exit(camera)
+    #time.sleep(1)  # Wait before reinitializing
 
+    # Re-initialize the camera connection
+    initialize_camera()
+    print("Camera connection reset.")
+
+@app.route('/set-preview-settings')
+def setSettings():
+    reset_camera_connection()
+    set_camera_preview_settings()
+    return "Done"
 @app.route('/')
 def home():
     if photo_in_progress:
@@ -176,7 +248,7 @@ def home():
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
-
+    #set_camera_preview_settings()
     return response
 
 @app.route('/test')
@@ -268,7 +340,7 @@ def print_image(image_data, paper_size, copies=1):
     options = {
         "media": paper_size,  # e.g., "4x6"
         "fit-to-page": "True",
-        "copies": str(copies)  # Convert copies to string for CUPS options
+        "copies": copies  # Convert copies to string for CUPS options
     }
 
     # Print the file
@@ -326,7 +398,6 @@ def print_photobooth():
     print(f"[INFO] Generated stripId: {stripId} and UUID: {uuid}")
 
 
-
     # Send strip ID back immediately to the client
     response = jsonify({'message': 'Strip ID generated, processing continues in background', 'uuid': uuid})
     response.status_code = 202
@@ -342,6 +413,7 @@ def print_photobooth():
 
 @app.route('/test_photobooth_strip', methods=['POST'])
 def test_photobooth_strip():
+    print("received photobooth strip test")
     images, error = util.process_uploaded_images(request)  # Use the same util function for processing
     if error:
         return jsonify({'error': error}), 400
@@ -383,6 +455,8 @@ atexit.register(cleanup)
 # Initialize the camera when the app starts
 with camera_lock:
     initialize_camera()
+    #time.sleep(3)
+    #set_camera_preview_settings()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
