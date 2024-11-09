@@ -1,4 +1,5 @@
 from supabase import create_client, Client
+from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 import io
@@ -13,6 +14,7 @@ load_dotenv('.env.local')
 url: str = 'https://fxpfrvfpgjqyermtbtwu.supabase.co'
 key: str = os.getenv('KEY')
 supabase: Client = create_client(url, key)
+executor = ThreadPoolExecutor()
 
 '''
 stripId - integer id of the photostrip
@@ -24,12 +26,7 @@ Returns:
     {code: 200, msg : "Success"}
     {code : 400, msg : "Descriptive Error Messsage"}
 '''
-#new plan: i have an array of photos, a templateId, and an eventName
-#i will everything to supabase
-def stripConstruction(stripId, photos, templateId, eventName, sessionId, uuid):
-
-    #assigned filename to be uploaded as
-    fileName = f'{stripId}'
+def fetchTemplate(templateId):
 
     #retrieve template information from templateId
     try:
@@ -55,6 +52,26 @@ def stripConstruction(stripId, photos, templateId, eventName, sessionId, uuid):
     #turn it into a cv2 object
     nparr = np.frombuffer(templateRaw, np.uint8)
     template = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    return {"code" : 200, "msg" : "success", "data" : template}
+
+
+#new plan: i have an array of photos, a templateId, and an eventName
+#i will everything to supabase
+def stripConstruction(stripId, photos, templateId, template, eventName, sessionId, uuid):
+
+    #assigned filename to be uploaded as
+    fileName = f'{stripId}'
+
+    #retrieve template information from templateId
+    try:
+        templateInfo = (
+            supabase.table('photo_templates')
+            .select('*')
+            .eq('id', templateId)
+            .execute()
+        ).data[0]
+    except:
+        return {"code" : 400, "msg" : f'Failed to find valid photo template under id {templateId}'}
 
     #get photo dimensions
     photoWidth = templateInfo['photo_width']
@@ -67,6 +84,12 @@ def stripConstruction(stripId, photos, templateId, eventName, sessionId, uuid):
 
     #convert photostrip to png
     success, stripFile = cv2.imencode(".png", photostrip)
+    
+    executor.submit(upload_to_supabase, stripId, photos, eventName, sessionId, uuid, stripFile, fileName)
+
+    return {"code" : 200, "msg" : "Success", "data" : stripFile}
+
+def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, fileName):
     try:
         #upload to supabase
         #IMPORTANT : duplicate filename will FAIL
@@ -108,7 +131,6 @@ def stripConstruction(stripId, photos, templateId, eventName, sessionId, uuid):
 
 
     return {"code" : 200, "msg" : "Success", "data" : stripFile}
-
 
 #HARD CODED VARIABLES FOR TESTING:
 #print(stripConstruction(1, 1, "test"))

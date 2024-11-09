@@ -11,6 +11,7 @@ load_dotenv('.env.local')
 url: str = 'https://fxpfrvfpgjqyermtbtwu.supabase.co'
 key: str = os.getenv('KEY')
 supabase: Client = create_client(url, key)
+global_template = None
 
 '''
 template - cv2 image object containing photo strip template

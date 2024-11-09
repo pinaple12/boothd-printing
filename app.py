@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory, send_file
 import util
-from strip_creation import stripConstruction
+from strip_creation import stripConstruction, fetchTemplate
 from flask_cors import CORS
 import gphoto2 as gp
 import os
@@ -10,10 +10,14 @@ from PIL import Image
 import io
 import cups
 import tempfile
+import cv2
+import numpy as np
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 SAVE_DIRECTORY = os.path.expanduser("~/photobooth_flask_app")
+#IMPORTANT: 
+global_template = None
 
 # Global variables
 camera = None
@@ -262,6 +266,8 @@ def stripCreation():
     stripId = request.form.get('stripId')
     templateId = request.form.get('templateId')
     eventName = request.form.get('eventName')
+    #send in an array
+    photos = request.form.get("photos")
 
     if stripId is None or templateId is None or eventName is None:
         return "Missing one of stripId, templateId, or eventName", 400
@@ -271,8 +277,17 @@ def stripCreation():
         templateId = int(templateId)
     except ValueError:
         return "stripId and templateId must be integers", 400
+    
+        #if this is the first load, save it in
+    if global_template is None:
+        resp = fetchTemplate(templateId)
+        if resp["code"] != 200:
+            return "Error in template retrieval from supabase", 400
+        else:
+            global_template = resp["data"]
 
-    resp = stripConstruction(stripId, templateId, eventName)
+
+    resp = stripConstruction(stripId, global_template, eventName)
 
     if 'msg' not in resp or 'code' not in resp:
         return "Internal error: Invalid response from stripConstruction", 500
@@ -355,7 +370,7 @@ def background_process(stripId, images, templateId, eventName, sessionId, copies
 
     # Construct the photobooth strip
     print(f"[INFO] Constructing photobooth strip for event: {eventName}, session: {sessionId}")
-    constructionResponse = stripConstruction(stripId, images, templateId, eventName, sessionId, uuid)
+    constructionResponse = stripConstruction(stripId, images, templateId, global_template, eventName, sessionId, uuid)
 
     if constructionResponse["code"] == 400:
         print(f"[ERROR] Strip construction failed: {constructionResponse['msg']}")
@@ -388,11 +403,20 @@ def print_photobooth():
 
     # Get photobooth ID from request
     photoBoothId = request.form.get('photoboothId')
+
+    
     copies = request.form.get('copies')
     print(f"[INFO] Received photoboothId: {photoBoothId}")
 
     templateId, eventName, sessionId = util.findTemplate(photoBoothId)
 
+    if global_template is None:
+        resp = fetchTemplate(templateId)
+        if resp["code"] != 200:
+            return "Error in template retrieval from supabase", 400
+        else:
+            global_template = resp["data"]
+    print(f"[INFO] Global template is none?: {global_template is None}")
     # Generate strip ID
     stripId, uuid = util.generateStripId(sessionId)
     print(f"[INFO] Generated stripId: {stripId} and UUID: {uuid}")
