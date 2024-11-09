@@ -335,16 +335,14 @@ def print_image(image_data, paper_size, copies=1):
     conn = cups.Connection()
     printer_name = "My_DSRX1_Printer"
 
-    # Create a new 4x6 (width x height) image to place two 2x6s side by side
-    new_width = image_data.width * 2  # 2x the width to make it 4x6
-    new_height = image_data.height  # Same height (6 inches)
+    # Set exact 4x6 dimensions based on 2x6 original image
+    new_width = int(image_data.width * 2)  # Ensure it's double-width
+    new_height = int(image_data.height)    # Keep same height
 
-    # Create a new blank canvas for the 4x6 image
+    # Create new 4x6 canvas and paste images with integer-based positions
     new_image = Image.new('RGB', (new_width, new_height), (255, 255, 255))
-
-    # Paste two copies of the original 2x6 image side by side
-    new_image.paste(image_data, (0, 0))  # First 2x6 on the left
-    new_image.paste(image_data, (image_data.width, 0))  # Second 2x6 on the right
+    new_image.paste(image_data, (0, 0))                    # Left side
+    new_image.paste(image_data, (image_data.width, 0))     # Right side
 
     # Save the new 4x6 image to a temporary file
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
@@ -353,9 +351,9 @@ def print_image(image_data, paper_size, copies=1):
 
     # Set the print options
     options = {
-        "media": paper_size,  # e.g., "4x6"
+        "media": paper_size,
         "fit-to-page": "True",
-        "copies": copies  # Convert copies to string for CUPS options
+        "copies": str(copies)  # Convert copies to string for CUPS options
     }
 
     # Print the file
@@ -409,7 +407,8 @@ def print_photobooth():
     print(f"[INFO] Received photoboothId: {photoBoothId}")
 
     templateId, eventName, sessionId = util.findTemplate(photoBoothId)
-
+    global global_template
+    
     if global_template is None:
         resp = fetchTemplate(templateId)
         if resp["code"] != 200:
