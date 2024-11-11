@@ -77,14 +77,24 @@ def process_uploaded_images(request):
 
     return images, None
 
-def create_strip(template, imgs, positions, photoWidth, photoHeight):
-    #HARD CODED: aspect of dslr being used
-    aspect_ratio = 3/2
+import os
+import cv2
+from datetime import datetime
 
+def create_strip(template, imgs, positions, photoWidth, photoHeight):
+    # HARD CODED: aspect of DSLR being used
+    aspect_ratio = 3 / 2
     target_ratio = photoWidth / photoHeight
 
+    # Ensure backup directories exist
+    os.makedirs('backups/raws', exist_ok=True)
+    os.makedirs('backups/strips', exist_ok=True)
+
+    # Generate a timestamp for filenames
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+
     for i, img in enumerate(imgs):
-        # image is too wide, resize based on height and crop width
+        # Image is too wide, resize based on height and crop width
         if aspect_ratio > target_ratio:
             new_height = photoHeight
             new_width = int(new_height * aspect_ratio)
@@ -92,7 +102,7 @@ def create_strip(template, imgs, positions, photoWidth, photoHeight):
 
             crop_start_x = (new_width - photoWidth) // 2
             cropped_img = resized_img[:, crop_start_x:crop_start_x + photoWidth]
-        # image is too tall, resize based on width and crop height
+        # Image is too tall, resize based on width and crop height
         elif aspect_ratio < target_ratio:
             new_width = photoWidth
             new_height = int(new_width / aspect_ratio)
@@ -100,12 +110,20 @@ def create_strip(template, imgs, positions, photoWidth, photoHeight):
 
             crop_start_y = (new_height - photoHeight) // 2
             cropped_img = resized_img[crop_start_y:crop_start_y + photoHeight, :]
-        #just resize the image
+        # Just resize the image
         else:
             cropped_img = cv2.resize(img, (photoWidth, photoHeight))
 
+        # Save the processed image
+        image_filename = f'backups/raws/image_{timestamp}_{i}.jpg'
+        cv2.imwrite(image_filename, cropped_img)
+
         pos = positions[i]
         template[pos[1]:pos[1] + photoHeight, pos[0]:pos[0] + photoWidth] = cropped_img
+
+    # Save the constructed strip
+    strip_filename = f'backups/strips/strip_{timestamp}.jpg'
+    cv2.imwrite(strip_filename, template)
 
     return template
 

@@ -4,17 +4,20 @@ import cv2
 import numpy as np
 import io
 import util
+from functools import lru_cache
 
 from dotenv import load_dotenv
 import os
 
 load_dotenv('.env.local')
 
-#credentials
+# credentials
 url: str = 'https://fxpfrvfpgjqyermtbtwu.supabase.co'
 key: str = os.getenv('KEY')
-supabase: Client = create_client(url, key)
-executor = ThreadPoolExecutor()
+executor = ThreadPoolExecutor(max_workers=1)  # Limit concurrent uploads
+
+def get_supabase_client():
+    return create_client(url, key)
 
 '''
 stripId - integer id of the photostrip
@@ -27,7 +30,8 @@ Returns:
     {code : 400, msg : "Descriptive Error Messsage"}
 '''
 def fetchTemplate(templateId):
-
+    supabase = get_supabase_client()
+    
     #retrieve template information from templateId
     try:
         templateInfo = (
@@ -54,13 +58,11 @@ def fetchTemplate(templateId):
     template = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     return {"code" : 200, "msg" : "success", "data" : template}
 
-
-#new plan: i have an array of photos, a templateId, and an eventName
-#i will everything to supabase
 def stripConstruction(stripId, photos, templateId, template, eventName, sessionId, uuid):
-
     #assigned filename to be uploaded as
     fileName = f'{stripId}'
+
+    supabase = get_supabase_client()
 
     #retrieve template information from templateId
     try:
@@ -90,47 +92,74 @@ def stripConstruction(stripId, photos, templateId, template, eventName, sessionI
     return {"code" : 200, "msg" : "Success", "data" : stripFile}
 
 def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, fileName):
-    try:
-        #upload to supabase
-        #IMPORTANT : duplicate filename will FAIL
-        (
-            supabase
-            .storage
-            .from_('photos')
-            .upload(file=stripFile.tobytes(), path=f'strips/{eventName}/{fileName}', file_options={"content-type" : "image/png"})
-         )
-    except:
-        return {"code" : 400, "msg" : "Strip upload failure"}
+    supabase = get_supabase_client()
+    
+    print(f"[INFO] Uploading strip to supabase for stripId: {stripId}")
+    
+    # Upload strip with retry logic
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = (
+                supabase 
+                .storage
+                .from_('photos')
+                .upload(file=stripFile.tobytes(), path=f'strips/{eventName}/{fileName}', file_options={"content-type" : "image/png"})
+            )
+            print(f"[SUCCESS] Strip uploaded to supabase for stripId: {stripId}")
+            break
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"[ERROR] Strip upload failure after {max_retries} attempts with error: {e}")
+                return {"code": 400, "msg": f"Strip upload failed: {str(e)}"}
+            else:
+                print(f"[WARN] Retry {attempt + 1} for strip {stripId}")
+                continue
 
     #array for saving photo names to upload
     photo_names = []
+    print(f"[INFO] Uploading photos to supabase for stripId: {stripId}")
+    
+    # Upload individual photos with retry logic
     for count, photo in enumerate(photos):
         #prepare photos for saving
         photo_name = str(stripId) + '_' + str(count)
         photo_names.append(photo_name)
         success, photoFile = cv2.imencode(".png", photo)
+        
+        for attempt in range(max_retries):
+            try:
+                response = (
+                    supabase.storage
+                    .from_('photos')
+                    .upload(file=photoFile.tobytes(), path=f'raw/{eventName}/{photo_name}', file_options={"content-type" : "image/png"})
+                )
+                print(f"[SUCCESS] Photo uploaded to supabase for stripId: {stripId}")
+                break
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    print(f"[ERROR] Photo upload failure after {max_retries} attempts with error: {e}")
+                else:
+                    print(f"[WARN] Retry {attempt + 1} for photo {photo_name}")
+                    continue
+
+    # Update database with retry logic
+    for attempt in range(max_retries):
         try:
-            (
-                supabase.storage
-                .from_('photos')
-                .upload(file=photoFile.tobytes(), path=f'raw/{eventName}/{photo_name}', file_options={"content-type" : "image/png"})
+            response = (
+                supabase.table("photo_strips")
+                .upsert({"uuid": uuid, "id": stripId, "session_id": sessionId, "image_url": fileName, "raw_photos": photo_names})
+                .execute()
             )
+            break
         except Exception as e:
-            print(e)
-            return {"code" : 400, "msg" : "Photo upload failure"}
+            if attempt == max_retries - 1:
+                print(f"[ERROR] Failed to insert into photo strips after {max_retries} attempts with error: {e}")
+            else:
+                print(f"[WARN] Retry {attempt + 1} for database update of strip {stripId}")
+                continue
 
-    try:
-        (
-            supabase.table("photo_strips")
-            .upsert({"uuid": uuid, "id" : stripId, "session_id" : sessionId, "image_url" : fileName, "raw_photos" : photo_names})
-            .execute()
-        )
-    except Exception as e:
-        print(e)
-        return{"code" : 400, "msg" : "Failed to insert into photo strips"}
-
-
-    return {"code" : 200, "msg" : "Success", "data" : stripFile}
+    return {"code": 200, "msg": "Success"}
 
 #HARD CODED VARIABLES FOR TESTING:
 #print(stripConstruction(1, 1, "test"))

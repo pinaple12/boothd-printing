@@ -12,6 +12,10 @@ import cups
 import tempfile
 import cv2
 import numpy as np
+from threading import Lock
+
+# Define a lock at the module level
+global_template_lock = Lock()
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -389,37 +393,47 @@ def background_process(stripId, images, templateId, eventName, sessionId, copies
         print(f"[ERROR] Printing failed for stripId: {stripId} - {str(e)}")
 
 
+from threading import Lock
+
+# Define a lock at the module level
+global_template_lock = Lock()
+
 @app.route('/print_photobooth', methods=['POST'])
 def print_photobooth():
     print("[INFO] Received request to print photobooth strip")
 
-    # Receive the images
+    # Initialize response in case of early errors
+    response = jsonify({'error': 'Unexpected error occurred'}), 500
+
+    # Process uploaded images
     images, error = util.process_uploaded_images(request)
     if error:
         print(f"[ERROR] Image processing failed: {error}")
         return jsonify({'error': error}), 400
 
-    # Get photobooth ID from request
+    # Retrieve photobooth ID and copies
     photoBoothId = request.form.get('photoboothId')
-
-    
-    copies = request.form.get('copies')
+    copies = request.form.get('copies', 1)
     print(f"[INFO] Received photoboothId: {photoBoothId}")
 
+    # Fetch template information
     templateId, eventName, sessionId = util.findTemplate(photoBoothId)
-    global global_template
     
-    if global_template is None:
-        resp = fetchTemplate(templateId)
-        if resp["code"] != 200:
-            return "Error in template retrieval from supabase", 400
-        else:
+    # Check and assign global_template with a lock
+    global global_template
+    with global_template_lock:
+        if global_template is None:
+            resp = fetchTemplate(templateId)
+            if resp["code"] != 200:
+                print(f"[ERROR] Template retrieval failed: {resp['msg']}")
+                return jsonify({'error': "Error in template retrieval from Supabase"}), 400
             global_template = resp["data"]
+
     print(f"[INFO] Global template is none?: {global_template is None}")
-    # Generate strip ID
+    
+    # Generate strip ID and UUID
     stripId, uuid = util.generateStripId(sessionId)
     print(f"[INFO] Generated stripId: {stripId} and UUID: {uuid}")
-
 
     # Send strip ID back immediately to the client
     response = jsonify({'message': 'Strip ID generated, processing continues in background', 'uuid': uuid})
@@ -482,5 +496,5 @@ with camera_lock:
     #set_camera_preview_settings()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0')
-#     app.run(port=5001)
+    # app.run(host='0.0.0.0')
+    app.run(port=5001)
