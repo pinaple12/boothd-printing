@@ -122,17 +122,20 @@ def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, f
     
     # Upload individual photos with retry logic
     for count, photo in enumerate(photos):
-        # Prepare photos for saving
         photo_name = f"{stripId}_{count}"
         photo_names.append(photo_name)
-        success, photoFile = cv2.imencode(".png", photo)
+        encode_params = [cv2.IMWRITE_JPEG_QUALITY, 80]  # 80% quality JPEG
+        success, photoFile = cv2.imencode(".jpg", photo, encode_params)
+        if not success:
+            print(f"[ERROR] Failed to encode photo {photo_name}")
+            continue
         
         for attempt in range(max_retries):
             try:
                 response = (
                     supabase.storage
                     .from_('photos')
-                    .upload(file=photoFile.tobytes(), path=f'raw/{eventName}/{photo_name}', file_options={"content-type": "image/png"})
+                    .upload(file=photoFile.tobytes(), path=f'raw/{eventName}/{photo_name}', file_options={"content-type": "image/jpeg"})  # Changed content-type to jpeg
                 )
                 print(f"[SUCCESS] Photo {photo_name} uploaded to supabase for stripId: {stripId}")
                 break
