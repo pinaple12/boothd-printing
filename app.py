@@ -257,6 +257,17 @@ def home():
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     #set_camera_preview_settings()
+    # Convert response data to bytes and create a higher quality JPEG
+    img_io = io.BytesIO()
+    with Image.open(os.path.join(SAVE_DIRECTORY, photo_filename)) as img:
+        img.save(img_io, format='JPEG', quality=80)
+    img_io.seek(0)
+    
+    # Create new response with the compressed JPEG
+    response = send_file(img_io, mimetype='image/jpeg')
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
     return response
 
 @app.route('/test')
@@ -496,5 +507,5 @@ with camera_lock:
     #set_camera_preview_settings()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0')
-    # app.run(port=5001)
+    #app.run(host='0.0.0.0')
+    app.run(port=5001)

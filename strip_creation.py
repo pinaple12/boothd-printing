@@ -5,34 +5,31 @@ import numpy as np
 import io
 import util
 from functools import lru_cache
+from twilio.rest import Client as TwilioClient
 
 from dotenv import load_dotenv
 import os
 
 load_dotenv('.env.local')
 
-# credentials
+# Supabase credentials
 url: str = 'https://fxpfrvfpgjqyermtbtwu.supabase.co'
 key: str = os.getenv('KEY')
 executor = ThreadPoolExecutor(max_workers=1)  # Limit concurrent uploads
 
+# Twilio credentials
+account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+auth_token = os.getenv("TWILIO_SECRET")
+twilio_phone_number = os.getenv("TWILIO_PHONE_NUMBER")
+twilio_client = TwilioClient(account_sid, auth_token)
+
 def get_supabase_client():
     return create_client(url, key)
 
-'''
-stripId - integer id of the photostrip
-templateId - integer id of the template being used
-eventName - string representation of the event being served
-
-This function creates and uploads requested photostrip to supabase
-Returns:
-    {code: 200, msg : "Success"}
-    {code : 400, msg : "Descriptive Error Messsage"}
-'''
 def fetchTemplate(templateId):
     supabase = get_supabase_client()
     
-    #retrieve template information from templateId
+    # Retrieve template information from templateId
     try:
         templateInfo = (
             supabase.table('photo_templates')
@@ -40,31 +37,31 @@ def fetchTemplate(templateId):
             .eq('id', templateId)
             .execute()
         ).data[0]
-    except:
-        return {"code" : 400, "msg" : f'Failed to find valid photo template under id {templateId}'}
+    except Exception as e:
+        return {"code": 400, "msg": f'Failed to find valid photo template under id {templateId}', "error": str(e)}
 
-    #retrieve template from storage
+    # Retrieve template from storage
     try:
         templateRaw = (
             supabase.storage
             .from_('templates')
             .download(templateInfo['image_url'])
         )
-    except:
-        return {"code": 400, "msg": f"Failed to find valid photo template under image name {templateInfo['image_url']}"}
+    except Exception as e:
+        return {"code": 400, "msg": f"Failed to find valid photo template under image name {templateInfo['image_url']}", "error": str(e)}
 
-    #turn it into a cv2 object
+    # Turn it into a cv2 object
     nparr = np.frombuffer(templateRaw, np.uint8)
     template = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    return {"code" : 200, "msg" : "success", "data" : template}
+    return {"code": 200, "msg": "success", "data": template}
 
 def stripConstruction(stripId, photos, templateId, template, eventName, sessionId, uuid):
-    #assigned filename to be uploaded as
+    # Assigned filename to be uploaded as
     fileName = f'{stripId}'
 
     supabase = get_supabase_client()
 
-    #retrieve template information from templateId
+    # Retrieve template information from templateId
     try:
         templateInfo = (
             supabase.table('photo_templates')
@@ -72,27 +69,29 @@ def stripConstruction(stripId, photos, templateId, template, eventName, sessionI
             .eq('id', templateId)
             .execute()
         ).data[0]
-    except:
-        return {"code" : 400, "msg" : f'Failed to find valid photo template under id {templateId}'}
+    except Exception as e:
+        return {"code": 400, "msg": f'Failed to find valid photo template under id {templateId}', "error": str(e)}
 
-    #get photo dimensions
+    # Get photo dimensions
     photoWidth = templateInfo['photo_width']
     photoHeight = templateInfo['photo_height']
 
-    #get photo offsets and zip them
+    # Get photo offsets and zip them
     pixelOffsets = list(zip(templateInfo['x_pixel_offsets'], templateInfo['y_pixel_offsets']))
 
     photostrip = util.create_strip(template, photos, pixelOffsets, photoWidth, photoHeight)
 
-    #convert photostrip to png
-    success, stripFile = cv2.imencode(".png", photostrip)
+    # Convert photostrip to jpeg with 80% quality
+    encode_params = [cv2.IMWRITE_JPEG_QUALITY, 80]
+    success, stripFile = cv2.imencode(".jpg", photostrip, encode_params)
     
     executor.submit(upload_to_supabase, stripId, photos, eventName, sessionId, uuid, stripFile, fileName)
-
-    return {"code" : 200, "msg" : "Success", "data" : stripFile}
+    
+    return {"code": 200, "msg": "Success", "data": stripFile}
 
 def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, fileName):
     supabase = get_supabase_client()
+    errors_occurred = False  # Flag to track errors
     
     print(f"[INFO] Uploading strip to supabase for stripId: {stripId}")
     
@@ -104,26 +103,27 @@ def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, f
                 supabase 
                 .storage
                 .from_('photos')
-                .upload(file=stripFile.tobytes(), path=f'strips/{eventName}/{fileName}', file_options={"content-type" : "image/png"})
+                .upload(file=stripFile.tobytes(), path=f'strips/{eventName}/{fileName}', file_options={"content-type": "image/jpeg"})
             )
             print(f"[SUCCESS] Strip uploaded to supabase for stripId: {stripId}")
             break
         except Exception as e:
             if attempt == max_retries - 1:
+                errors_occurred = True
                 print(f"[ERROR] Strip upload failure after {max_retries} attempts with error: {e}")
                 return {"code": 400, "msg": f"Strip upload failed: {str(e)}"}
             else:
                 print(f"[WARN] Retry {attempt + 1} for strip {stripId}")
                 continue
 
-    #array for saving photo names to upload
+    # Array for saving photo names to upload
     photo_names = []
     print(f"[INFO] Uploading photos to supabase for stripId: {stripId}")
     
     # Upload individual photos with retry logic
     for count, photo in enumerate(photos):
-        #prepare photos for saving
-        photo_name = str(stripId) + '_' + str(count)
+        # Prepare photos for saving
+        photo_name = f"{stripId}_{count}"
         photo_names.append(photo_name)
         success, photoFile = cv2.imencode(".png", photo)
         
@@ -132,12 +132,13 @@ def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, f
                 response = (
                     supabase.storage
                     .from_('photos')
-                    .upload(file=photoFile.tobytes(), path=f'raw/{eventName}/{photo_name}', file_options={"content-type" : "image/png"})
+                    .upload(file=photoFile.tobytes(), path=f'raw/{eventName}/{photo_name}', file_options={"content-type": "image/png"})
                 )
-                print(f"[SUCCESS] Photo uploaded to supabase for stripId: {stripId}")
+                print(f"[SUCCESS] Photo {photo_name} uploaded to supabase for stripId: {stripId}")
                 break
             except Exception as e:
                 if attempt == max_retries - 1:
+                    errors_occurred = True
                     print(f"[ERROR] Photo upload failure after {max_retries} attempts with error: {e}")
                 else:
                     print(f"[WARN] Retry {attempt + 1} for photo {photo_name}")
@@ -151,18 +152,47 @@ def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, f
                 .upsert({"uuid": uuid, "id": stripId, "session_id": sessionId, "image_url": fileName, "raw_photos": photo_names})
                 .execute()
             )
+            print(f"[SUCCESS] Database updated for stripId: {stripId}")
             break
         except Exception as e:
             if attempt == max_retries - 1:
+                errors_occurred = True
                 print(f"[ERROR] Failed to insert into photo strips after {max_retries} attempts with error: {e}")
             else:
                 print(f"[WARN] Retry {attempt + 1} for database update of strip {stripId}")
                 continue
 
+    # When all is said and done, let's text the user that their photostrip is ready
+    if not errors_occurred:
+        # Fetch phone numbers associated with the strip
+        try:
+            response = supabase.table("sms_notification").select("phone").eq("for_strip", stripId).execute()
+            data = response.data
+            if data and len(data) > 0:
+                print(f"[INFO] Sending SMS notifications for stripId: {stripId} to {len(data)} users")
+                for entry in data:
+                    phone_number = entry["phone"]
+                    print(f"[INFO] Sending SMS to {phone_number} from {twilio_phone_number}")
+                    try:
+                        # ---------- Turning off until we are verified -----------
+                        # twilio_client.messages.create(
+                        #     body="Your photos are ready!",
+                        #     to=phone_number,
+                        #     from_=twilio_phone_number
+                        # )
+                        print(f"[SUCCESS] Message sent to {phone_number}")
+                    except Exception as e:
+                        print(f"[ERROR] Error sending message to {phone_number}: {e}")
+            else:
+                print(f"[INFO] No phone numbers found for stripId: {stripId}")
+        except Exception as e:
+            print(f"[ERROR] Error fetching phone numbers: {e}")
+    else:
+        print(f"[INFO] Skipping SMS notification due to earlier errors for stripId: {stripId}")
+    
     return {"code": 200, "msg": "Success"}
 
-#HARD CODED VARIABLES FOR TESTING:
-#print(stripConstruction(1, 1, "test"))
-
+# Example usage
 # pics = util.generate_white_blocks()
-# print(stripConstruction(2, pics, 1, "test", 1))
+# result = stripConstruction(2, pics, 1, template, "test_event", 1, "unique_uuid")
+# print(result)
