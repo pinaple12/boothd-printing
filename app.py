@@ -100,7 +100,7 @@ def initialize_camera():
 
 #focuses with camera
 def autofocus():
-    time.sleep(2)
+    # time.sleep(2) Maybe?
     try:
         print("Attempting to autofocus and set camera settings...")
         config = camera.get_config()
@@ -115,22 +115,22 @@ def autofocus():
             return None
 
         # Set aperture to 8
-        aperture_widget = find_widget(config, 'aperture')
-        if aperture_widget:
-            aperture_widget.set_value('8')
-            camera.set_config(config)
-            print("Aperture set to 8")
-        else:
-            print("Aperture setting not found")
+        # aperture_widget = find_widget(config, 'aperture')
+        # if aperture_widget:
+        #     aperture_widget.set_value('8')
+        #     camera.set_config(config)
+        #     print("Aperture set to 8")
+        # else:
+        #     print("Aperture setting not found")
 
         # Set ISO to 320
-        iso_widget = find_widget(config, 'iso')
-        if iso_widget:
-            iso_widget.set_value('320')
-            camera.set_config(config)
-            print("ISO set to 320")
-        else:
-            print("ISO setting not found")
+        # iso_widget = find_widget(config, 'iso')
+        # if iso_widget:
+        #     iso_widget.set_value('320')
+        #     camera.set_config(config)
+        #     print("ISO set to 320")
+        # else:
+        #     print("ISO setting not found")
 
         # Proceed with autofocus as before
         #autofocus_triggered = False
