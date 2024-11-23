@@ -109,6 +109,7 @@ def autofocus():
     # time.sleep(2) Maybe?
     try:
         print("Attempting to autofocus and set camera settings...")
+        set_camera_photo_taking_settings()
         config = camera.get_config()
 
         def find_widget(widget, name):
@@ -184,7 +185,6 @@ def take_photo_with_fallback():
                 original_focus_mode = focus_mode.get_value()
                 focus_mode.set_value('Manual')
                 camera.set_config(config)
-                set_camera_photo_taking_settings()
                 file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
                 focus_mode.set_value(original_focus_mode)
                 camera.set_config(config)
