@@ -30,10 +30,16 @@ photo_in_progress = False
 photo_lock = threading.Lock()
 
 def set_camera_setting(setting_name, value):
-    config = gp.check_result(gp.gp_camera_get_config(camera))
-    setting = gp.check_result(gp.gp_widget_get_child_by_name(config, setting_name))
-    gp.check_result(gp.gp_widget_set_value(setting, value))
-    gp.check_result(gp.gp_camera_set_config(camera, config))
+    try:
+        config = gp.check_result(gp.gp_camera_get_config(camera))
+        setting = gp.check_result(gp.gp_widget_get_child_by_name(config, setting_name))
+        gp.check_result(gp.gp_widget_set_value(setting, value))
+        gp.check_result(gp.gp_camera_set_config(camera, config))
+        print(f"Successfully set camera setting {setting_name} to {value}")
+    except gp.GPhoto2Error as e:
+        print(f"Error setting camera setting {setting_name}: {str(e)}")
+    except Exception as e:
+        print(f"Unexpected error setting camera setting {setting_name}: {str(e)}")
     
 def set_camera_preview_settings():
     print("")
