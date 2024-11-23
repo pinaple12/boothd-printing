@@ -68,7 +68,7 @@ def process_uploaded_images(request):
                     return None, f'Error processing image {i+1}'
                 
                 # Compress the image as JPEG with quality=70 (can be adjusted between 0-100)
-                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 70]
+                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
                 _, compressed = cv2.imencode('.jpg', img, encode_param)
                 compressed_img = cv2.imdecode(compressed, cv2.IMREAD_COLOR)
                 

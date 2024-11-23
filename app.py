@@ -266,7 +266,7 @@ def home():
     # Convert response data to bytes and create a higher quality JPEG
     img_io = io.BytesIO()
     with Image.open(os.path.join(SAVE_DIRECTORY, photo_filename)) as img:
-        img.save(img_io, format='JPEG', quality=80)
+        img.save(img_io, format='JPEG', quality=95)
     img_io.seek(0)
     
     # Create new response with the compressed JPEG
@@ -489,7 +489,7 @@ def test_photobooth_strip():
 
     # Save image into BytesIO to send as a response
     img_io = io.BytesIO()
-    strip.save(img_io, 'JPEG', quality=70)
+    strip.save(img_io, 'JPEG', quality=95)
     img_io.seek(0)
 
     # Return the image file instead of printing

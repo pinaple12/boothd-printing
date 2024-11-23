@@ -82,7 +82,7 @@ def stripConstruction(stripId, photos, templateId, template, eventName, sessionI
     photostrip = util.create_strip(template, photos, pixelOffsets, photoWidth, photoHeight)
 
     # Convert photostrip to jpeg with 80% quality
-    encode_params = [cv2.IMWRITE_JPEG_QUALITY, 80]
+    encode_params = [cv2.IMWRITE_JPEG_QUALITY, 90]
     success, stripFile = cv2.imencode(".jpg", photostrip, encode_params)
     
     executor.submit(upload_to_supabase, stripId, photos, eventName, sessionId, uuid, stripFile, fileName)
@@ -124,7 +124,7 @@ def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, f
     for count, photo in enumerate(photos):
         photo_name = f"{stripId}_{count}"
         photo_names.append(photo_name)
-        encode_params = [cv2.IMWRITE_JPEG_QUALITY, 80]  # 80% quality JPEG
+        encode_params = [cv2.IMWRITE_JPEG_QUALITY, 90]  # 80% quality JPEG
         success, photoFile = cv2.imencode(".jpg", photo, encode_params)
         if not success:
             print(f"[ERROR] Failed to encode photo {photo_name}")
