@@ -47,7 +47,6 @@ def set_camera_preview_settings():
     set_camera_setting('iso', '4000')
 
 def set_camera_photo_taking_settings():
-    print("")
     set_camera_setting('aperture', '8')
     set_camera_setting('iso', '320')
 
@@ -163,16 +162,16 @@ def autofocus():
 
 #takes photos
 def take_photo_with_fallback():
-    try:
-       config = camera.get_config()
-       #flash_mode = config.get_child_by_name('isosio')
-       flash_mode = config.get_child_by_name('popupflash')
-       if flash_mode:
-            original_flash_mode = flash_mode.get_value()
-            flash_mode.set_value(1)
-            camera.set_config(config)
-    except gp.GPhoto2Error as flash_error:
-        print(f"Unable to configure flash: {flash_error}")
+    # try:
+    #    config = camera.get_config()
+    #    #flash_mode = config.get_child_by_name('isosio')
+    #    flash_mode = config.get_child_by_name('popupflash')
+    #    if flash_mode:
+    #         original_flash_mode = flash_mode.get_value()
+    #         flash_mode.set_value(1)
+    #         camera.set_config(config)
+    # except gp.GPhoto2Error as flash_error:
+    #     print(f"Unable to configure flash: {flash_error}")
     # try:
     autofocus()
     return camera.capture(gp.GP_CAPTURE_IMAGE)
