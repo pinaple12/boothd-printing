@@ -103,97 +103,29 @@ def initialize_camera():
         print(f"Error initializing camera: {error}")
         camera = None
 
-#focuses with camera
+# Focuses with camera
 def autofocus():
-    # time.sleep(2) Maybe?
     try:
         print("Attempting to set camera settings...")
         set_camera_photo_taking_settings()
-        # config = camera.get_config()
-
-        # def find_widget(widget, name):
-        #     if widget.get_name().lower() == name.lower():
-        #         return widget
-        #     for child in widget.get_children():
-        #         result = find_widget(child, name)
-        #         if result:
-        #             return result
-        #     return None
-
-        # Set aperture to 8
-        # aperture_widget = find_widget(config, 'aperture')
-        # if aperture_widget:
-        #     aperture_widget.set_value('8')
-        #     camera.set_config(config)
-        #     print("Aperture set to 8")
-        # else:
-        #     print("Aperture setting not found")
-
-        # Set ISO to 320
-        # iso_widget = find_widget(config, 'iso')
-        # if iso_widget:
-        #     iso_widget.set_value('320')
-        #     camera.set_config(config)
-        #     print("ISO set to 320")
-        # else:
-        #     print("ISO setting not found")
-
-        # Proceed with autofocus as before
-        #autofocus_triggered = False
-        #for section in config.get_children():
-        #    for child in section.get_children():
-        #        if 'autofocus' in child.get_name().lower():
-        #            child.set_value(1)
-        #            camera.set_config(config)
-        #            time.sleep(2)  # Give the camera time to focus
-        #            print(f"Autofocus triggered using {child.get_name()}")
-        #            autofocus_triggered = True
-        #            break
-        #    if autofocus_triggered:
-        #        break
-
-        #if not autofocus_triggered:
-        #    print("No specific autofocus setting found. Trying generic capture...")
-        #    camera.capture(gp.GP_CAPTURE_PREVIEW)
-        #    time.sleep(2)  # Give the camera time to adjust
-        #    print("Generic autofocus completed")
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"An error occurred during autofocus: {e}")
 
-#takes photos
+# Takes photos
+import time
+
 def take_photo_with_fallback():
-    # try:
-    #    config = camera.get_config()
-    #    #flash_mode = config.get_child_by_name('isosio')
-    #    flash_mode = config.get_child_by_name('popupflash')
-    #    if flash_mode:
-    #         original_flash_mode = flash_mode.get_value()
-    #         flash_mode.set_value(1)
-    #         camera.set_config(config)
-    # except gp.GPhoto2Error as flash_error:
-    #     print(f"Unable to configure flash: {flash_error}")
-    # try:
+    autofocus_start = time.time()
     autofocus()
-    return camera.capture(gp.GP_CAPTURE_IMAGE)
-    # except gp.GPhoto2Error as af_error:
-    #     print(f"Autofocus error: {af_error}. Attempting manual focus capture.")
-    #     try:
-    #         config = camera.get_config()
-    #         focus_mode = config.get_child_by_name('focusmode')
-    #         if focus_mode:
-    #             original_focus_mode = focus_mode.get_value()
-    #             focus_mode.set_value('Manual')
-    #             camera.set_config(config)
-    #             file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
-    #             focus_mode.set_value(original_focus_mode)
-    #             camera.set_config(config)
-    #         else:
-    #             set_camera_photo_taking_settings()
-    #             file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
-    #         return file_path
-    #     except gp.GPhoto2Error as manual_error:
-    #         print(f"Manual focus capture also failed: {manual_error}")
-    #         raise
+    autofocus_end = time.time()
+    print(f"Autofocus time: {autofocus_end - autofocus_start:.2f} seconds")
+    
+    capture_start = time.time()
+    file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
+    capture_end = time.time()
+    print(f"Capture time: {capture_end - capture_start:.2f} seconds")
+    
+    return file_path
 
 def take_photo():
     global photo_in_progress, camera
@@ -209,6 +141,7 @@ def take_photo():
                 initialize_camera()
             if camera is None:
                 return None
+            
             print('Taking a photo...')
             file_path = take_photo_with_fallback()
 
