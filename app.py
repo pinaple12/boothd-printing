@@ -109,16 +109,16 @@ def autofocus():
     try:
         print("Attempting to set camera settings...")
         set_camera_photo_taking_settings()
-        config = camera.get_config()
+        # config = camera.get_config()
 
-        def find_widget(widget, name):
-            if widget.get_name().lower() == name.lower():
-                return widget
-            for child in widget.get_children():
-                result = find_widget(child, name)
-                if result:
-                    return result
-            return None
+        # def find_widget(widget, name):
+        #     if widget.get_name().lower() == name.lower():
+        #         return widget
+        #     for child in widget.get_children():
+        #         result = find_widget(child, name)
+        #         if result:
+        #             return result
+        #     return None
 
         # Set aperture to 8
         # aperture_widget = find_widget(config, 'aperture')
