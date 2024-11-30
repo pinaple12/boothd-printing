@@ -174,7 +174,7 @@ def take_photo_with_fallback():
     #     print(f"Unable to configure flash: {flash_error}")
     # try:
     autofocus()
-    return camera.capture(gp.GP_CAPTURE_PREVIEW)
+    return camera.capture(gp.GP_CAPTURE_IMAGE)
     # except gp.GPhoto2Error as af_error:
     #     print(f"Autofocus error: {af_error}. Attempting manual focus capture.")
     #     try:
