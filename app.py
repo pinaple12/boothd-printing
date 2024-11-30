@@ -108,7 +108,7 @@ def initialize_camera():
 def autofocus():
     # time.sleep(2) Maybe?
     try:
-        print("Attempting to autofocus and set camera settings...")
+        print("Attempting to set camera settings...")
         set_camera_photo_taking_settings()
         config = camera.get_config()
 
@@ -173,28 +173,28 @@ def take_photo_with_fallback():
             camera.set_config(config)
     except gp.GPhoto2Error as flash_error:
         print(f"Unable to configure flash: {flash_error}")
-    try:
-        autofocus()
-        return camera.capture(gp.GP_CAPTURE_IMAGE)
-    except gp.GPhoto2Error as af_error:
-        print(f"Autofocus error: {af_error}. Attempting manual focus capture.")
-        try:
-            config = camera.get_config()
-            focus_mode = config.get_child_by_name('focusmode')
-            if focus_mode:
-                original_focus_mode = focus_mode.get_value()
-                focus_mode.set_value('Manual')
-                camera.set_config(config)
-                file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
-                focus_mode.set_value(original_focus_mode)
-                camera.set_config(config)
-            else:
-                set_camera_photo_taking_settings()
-                file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
-            return file_path
-        except gp.GPhoto2Error as manual_error:
-            print(f"Manual focus capture also failed: {manual_error}")
-            raise
+    # try:
+    autofocus()
+    return camera.capture(gp.GP_CAPTURE_IMAGE)
+    # except gp.GPhoto2Error as af_error:
+    #     print(f"Autofocus error: {af_error}. Attempting manual focus capture.")
+    #     try:
+    #         config = camera.get_config()
+    #         focus_mode = config.get_child_by_name('focusmode')
+    #         if focus_mode:
+    #             original_focus_mode = focus_mode.get_value()
+    #             focus_mode.set_value('Manual')
+    #             camera.set_config(config)
+    #             file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
+    #             focus_mode.set_value(original_focus_mode)
+    #             camera.set_config(config)
+    #         else:
+    #             set_camera_photo_taking_settings()
+    #             file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
+    #         return file_path
+    #     except gp.GPhoto2Error as manual_error:
+    #         print(f"Manual focus capture also failed: {manual_error}")
+    #         raise
 
 def take_photo():
     global photo_in_progress, camera
