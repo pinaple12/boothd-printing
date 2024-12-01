@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify, send_from_directory, send_file
 import util
 from strip_creation import stripConstruction, fetchTemplate
 from flask_cors import CORS
-import gphoto2 as gp
 import os
 import threading
 import time
@@ -13,6 +12,8 @@ import tempfile
 import cv2
 import numpy as np
 from threading import Lock
+import subprocess
+import json
 
 # Define a lock at the module level
 global_template_lock = Lock()
@@ -20,115 +21,78 @@ global_template_lock = Lock()
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 SAVE_DIRECTORY = os.path.expanduser("~/photobooth_flask_app")
-#IMPORTANT: 
 global_template = None
 
 # Global variables
-camera = None
 camera_lock = threading.Lock()
 photo_in_progress = False
 photo_lock = threading.Lock()
 
-def set_camera_setting(setting_name, value):
+def run_gphoto_command(command):
     try:
-        config = gp.check_result(gp.gp_camera_get_config(camera))
-        setting = gp.check_result(gp.gp_widget_get_child_by_name(config, setting_name))
-        gp.check_result(gp.gp_widget_set_value(setting, value))
-        gp.check_result(gp.gp_camera_set_config(camera, config))
-        print(f"Successfully set camera setting {setting_name} to {value}")
-    except gp.GPhoto2Error as e:
-        print(f"Error setting camera setting {setting_name}: {str(e)}")
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Error running command: {command}")
+            print(f"Error output: {result.stderr}")
+            return False
+        return True
     except Exception as e:
-        print(f"Unexpected error setting camera setting {setting_name}: {str(e)}")
+        print(f"Exception running command: {str(e)}")
+        return False
+
+def set_camera_setting(setting_name, value):
+    command = f"gphoto2 --set-config {setting_name}={value}"
+    return run_gphoto_command(command)
     
 def set_camera_preview_settings():
-    print("")
+    print("Setting preview settings...")
     set_camera_setting('aperture', '3.5')
     set_camera_setting('iso', '4000')
 
 def set_camera_photo_taking_settings():
+    print("Setting photo taking settings...")
     set_camera_setting('aperture', '8')
     set_camera_setting('iso', '320')
 
 def set_live_view_mode():
-    config = camera.get_config()
-
-    settings_to_adjust = {
+    settings = {
         'output': 'TFT',
-        'evfmode': 1,
+        'evfmode': '1',
         'aperture': '3.5',
         'iso': '4000'
     }
+    
+    for setting_name, value in settings.items():
+        set_camera_setting(setting_name, value)
+    return True
 
-    for setting_name, desired_value in settings_to_adjust.items():
-        try:
-            setting = config.get_child_by_name(setting_name)
-            if setting:
-                current_value = setting.get_value()
-                print(f"Current {setting_name}: {current_value}")
-
-                if str(current_value) != str(desired_value):
-                    setting.set_value(desired_value)
-                    print(f"Setting {setting_name} to {desired_value}")
-                else:
-                    print(f"{setting_name} is already set to desired value: {desired_value}")
-            else:
-                print(f"Setting {setting_name} not found")
-        except gp.GPhoto2Error as e:
-            print(f"Error setting {setting_name}: {str(e)}")
-
+def initialize_camera():
+    print("Initializing camera...")
     try:
-        camera.set_config(config)
-        print("Applied new settings to camera")
+        # Reset USB first
+        os.system("sudo umount /dev/bus/usb/001/007")
+        
+        # Test camera connection
+        result = subprocess.run("gphoto2 --auto-detect", shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            print("Failed to detect camera")
+            return False
+            
+        set_live_view_mode()
         return True
-    except gp.GPhoto2Error as e:
-        print(f"Error applying settings: {str(e)}")
+    except Exception as e:
+        print(f"Error initializing camera: {str(e)}")
         return False
 
-#intiializes camera
-def initialize_camera():
-    global camera
-    try:
-        os.system("sudo umount /dev/bus/usb/001/007")
-        camera = gp.Camera()
-        camera.init()
-        print("Camera initialized successfully")
-
-        set_live_view_mode()
-        #    #print("Attempted to set clean live view mode")
-        #else:
-        #    print("Failed to set clean live view mode. On-screen display might still be visible.")
-
-    except gp.GPhoto2Error as error:
-        print(f"Error initializing camera: {error}")
-        camera = None
-
-# Focuses with camera
 def autofocus():
     try:
-        print("Attempting to set camera settings...")
+        print("Setting photo taking settings for focus...")
         set_camera_photo_taking_settings()
     except Exception as e:
         print(f"An error occurred during autofocus: {e}")
 
-# Takes photos
-import time
-
-def take_photo_with_fallback():
-    autofocus_start = time.time()
-    autofocus()
-    autofocus_end = time.time()
-    print(f"Autofocus time: {autofocus_end - autofocus_start:.2f} seconds")
-    
-    capture_start = time.time()
-    file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
-    capture_end = time.time()
-    print(f"Capture time: {capture_end - capture_start:.2f} seconds")
-    
-    return file_path
-
 def take_photo():
-    global photo_in_progress, camera
+    global photo_in_progress
 
     with photo_lock:
         if photo_in_progress:
@@ -137,45 +101,45 @@ def take_photo():
 
     try:
         with camera_lock:
-            if camera is None:
-                initialize_camera()
-            if camera is None:
-                return None
+            if not os.path.exists(SAVE_DIRECTORY):
+                os.makedirs(SAVE_DIRECTORY)
+                
+            timestamp = int(time.time())
+            filename = f"photo_{timestamp}.jpg"
+            full_path = os.path.join(SAVE_DIRECTORY, filename)
             
             print('Taking a photo...')
-            file_path = take_photo_with_fallback()
-
-        full_path = os.path.join(SAVE_DIRECTORY, file_path.name)
-
-        if not os.path.exists(SAVE_DIRECTORY):
-            os.makedirs(SAVE_DIRECTORY)
-
-        with camera_lock:
-            camera_file = camera.file_get(file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL)
-        camera_file.save(full_path)
-        print(f'Photo saved as {full_path}')
-
-        return file_path.name
-    except gp.GPhoto2Error as error:
-        print(f"Error taking photo: {error}")
-        with camera_lock:
-            camera = None  # Reset camera on error
+            autofocus_start = time.time()
+            autofocus()
+            autofocus_end = time.time()
+            print(f"Autofocus time: {autofocus_end - autofocus_start:.2f} seconds")
+            
+            capture_start = time.time()
+            # Capture and download in one command for better performance
+            command = f"gphoto2 --capture-image-and-download --filename={full_path}"
+            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                print(f"Error taking photo: {result.stderr}")
+                return None
+                
+            capture_end = time.time()
+            print(f"Capture time: {capture_end - capture_start:.2f} seconds")
+            
+            return filename
+    except Exception as error:
+        print(f"Error taking photo: {str(error)}")
         return None
     finally:
         with photo_lock:
             photo_in_progress = False
             
 def reset_camera_connection():
-    global camera  # Explicitly reference the global camera variable
     print("Resetting camera connection...")
-    
-    # Close the camera connection
-    gp.gp_camera_exit(camera)
-    #time.sleep(1)  # Wait before reinitializing
-
-    # Re-initialize the camera connection
-    initialize_camera()
-    print("Camera connection reset.")
+    # Kill any existing gphoto2 processes
+    os.system("pkill -f gphoto2")
+    time.sleep(1)
+    return initialize_camera()
 
 @app.route('/set-preview-settings')
 def setSettings():
@@ -429,11 +393,8 @@ def test_photobooth_strip():
 
 
 def cleanup():
-    global camera
-    with camera_lock:
-        if camera:
-            camera.exit()
-            camera = None
+    print("Cleaning up camera connection...")
+    os.system("pkill -f gphoto2")
 
 import atexit
 atexit.register(cleanup)
@@ -441,9 +402,6 @@ atexit.register(cleanup)
 # Initialize the camera when the app starts
 with camera_lock:
     initialize_camera()
-    #time.sleep(3)
-    #set_camera_preview_settings()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
-    #app.run(port=5001)
