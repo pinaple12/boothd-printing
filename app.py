@@ -29,12 +29,21 @@ camera_lock = threading.Lock()
 photo_in_progress = False
 photo_lock = threading.Lock()
 
+# Print banner immediately at import time
+print("""
+██████╗  ██████╗  ██████╗ ████████╗██╗  ██╗╗██████╗ 
+██╔══██╗██╔═══██╗██╔═══██╗╚══██╔══╝██║  ██║██╔══██╗
+██████╔╝██║   ██║██║   ██║   ██║   ███████║██║  ██║
+██╔══██╗██║   ██║██║   ██║   ██║   ██╔══██║██║  ██║
+██████╔╝╚██████╔╝╚██████╔╝   ██║   ██║  ██║██████╔╝
+╚═════╝  ╚═════╝  ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚═════╝ 
+""")
+
 def set_camera_setting(setting_name, value):
     try:
         config = gp.check_result(gp.gp_camera_get_config(camera))
         setting = gp.check_result(gp.gp_widget_get_child_by_name(config, setting_name))
         
-        # Only change if value is different
         current_value = setting.get_value()
         if str(current_value) != str(value):
             gp.check_result(gp.gp_widget_set_value(setting, value))
@@ -69,39 +78,22 @@ def set_live_view_mode():
             setting = config.get_child_by_name(setting_name)
             if setting:
                 current_value = setting.get_value()
-                print(f"Current {setting_name}: {current_value}")
-
                 if str(current_value) != str(desired_value):
                     setting.set_value(desired_value)
-                    print(f"Setting {setting_name} to {desired_value}")
-                else:
-                    print(f"{setting_name} is already set to desired value: {desired_value}")
-            else:
-                print(f"Setting {setting_name} not found")
-        except gp.GPhoto2Error as e:
-            print(f"Error setting {setting_name}: {str(e)}")
+        except gp.GPhoto2Error:
+            return False
 
     try:
         camera.set_config(config)
-        print("Applied new settings to camera")
         return True
-    except gp.GPhoto2Error as e:
-        print(f"Error applying settings: {str(e)}")
+    except gp.GPhoto2Error:
         return False
 
 def initialize_camera():
     global camera
     try:
-        print("""
-██████╗  ██████╗  ██████╗ ████████╗██╗  ██╗██╗██████╗ 
-██╔══██╗██╔═══██╗██╔═══██╗╚══██╔══╝██║  ██║██║██╔══██╗
-██████╔╝██║   ██║██║   ██║   ██║   ███████║██║██║  ██║
-██╔══██╗██║   ██║██║   ██║   ██║   ██╔══██║██║██║  ██║
-██████╔╝╚██████╔╝╚██████╔╝   ██║   ██║  ██║██║██████╔╝
-╚═════╝  ╚═════╝  ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚═╝╚═════╝ 
-        """)
         print("\nInitializing camera...")
-        os.system("sudo umount /dev/bus/usb/001/007")
+        os.system("sudo umount /dev/bus/usb/001/007 2>/dev/null")
         
         camera = gp.Camera()
         camera.init()
