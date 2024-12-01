@@ -41,9 +41,9 @@ def set_camera_setting(setting_name, value):
             gp.check_result(gp.gp_camera_set_config(camera, config))
             
     except gp.GPhoto2Error as e:
-        print(f"⚠️  Setting '{setting_name}' failed: {str(e)}")
+        print(f"[WARN] Setting '{setting_name}' failed: {str(e)}")
     except Exception as e:
-        print(f"❌ Unexpected error with '{setting_name}': {str(e)}")
+        print(f"[ERROR] Unexpected error with '{setting_name}': {str(e)}")
 
 def set_camera_preview_settings():
     print("Setting preview settings...")
@@ -92,7 +92,7 @@ def set_live_view_mode():
 def initialize_camera():
     global camera
     try:
-        print("\n🎥 Initializing camera...")
+        print("\n[INIT] Starting camera initialization...")
         os.system("sudo umount /dev/bus/usb/001/007")
         
         camera = gp.Camera()
@@ -125,12 +125,12 @@ def initialize_camera():
             pass
             
         if set_live_view_mode():
-            print("✅ Camera ready")
+            print("[INIT] Camera ready")
         else:
-            print("⚠️  Live view setup failed")
+            print("[WARN] Live view setup failed")
 
     except gp.GPhoto2Error as error:
-        print(f"❌ Camera initialization failed: {error}")
+        print(f"[ERROR] Camera initialization failed: {error}")
         camera = None
 
 def take_photo():
@@ -151,7 +151,7 @@ def take_photo():
             if not os.path.exists(SAVE_DIRECTORY):
                 os.makedirs(SAVE_DIRECTORY)
             
-            print('\n📸 Taking photo...')
+            print('\n[PHOTO] Starting capture process...')
             
             # Configure settings for photo
             settings_start = time.time()
@@ -170,13 +170,11 @@ def take_photo():
                 
                 # Trigger capture
                 trigger_time_start = time.time()
-                file_path = camera.trigger_capture()
+                file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
+                if not file_path:
+                    print("[ERROR] Capture failed - no file path returned")
+                    return None
                 trigger_time = time.time() - trigger_time_start
-                
-                # Wait for event
-                wait_time_start = time.time()
-                event_type, event_data = camera.wait_for_event(5000)
-                wait_time = time.time() - wait_time_start
                 
                 # Get the file
                 download_time_start = time.time()
@@ -193,16 +191,15 @@ def take_photo():
                 download_time = time.time() - download_time_start
                 
             except gp.GPhoto2Error as error:
-                print(f"❌ Capture error: {error}")
+                print(f"[ERROR] Capture failed: {error}")
                 return None
                 
             total_time = time.time() - capture_start
             
             # Print timing summary
-            print("\n⏱️  Timing Summary:")
+            print("\n[TIMING]")
             print(f"  Settings:  {settings_time:.2f}s")
             print(f"  Trigger:   {trigger_time:.2f}s")
-            print(f"  Wait:      {wait_time:.2f}s")
             print(f"  Download:  {download_time:.2f}s")
             print(f"  Total:     {total_time:.2f}s\n")
             
@@ -211,7 +208,7 @@ def take_photo():
             
             return filename
     except Exception as error:
-        print(f"❌ Error: {str(error)}")
+        print(f"[ERROR] {str(error)}")
         return None
     finally:
         with photo_lock:
