@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory, send_file
 import util
 from strip_creation import stripConstruction, fetchTemplate
 from flask_cors import CORS
+import gphoto2 as gp
 import os
 import threading
 import time
@@ -13,7 +14,6 @@ import cv2
 import numpy as np
 from threading import Lock
 import subprocess
-import json
 
 # Define a lock at the module level
 global_template_lock = Lock()
@@ -24,106 +24,88 @@ SAVE_DIRECTORY = os.path.expanduser("~/photobooth_flask_app")
 global_template = None
 
 # Global variables
+camera = None
 camera_lock = threading.Lock()
 photo_in_progress = False
 photo_lock = threading.Lock()
 
-def run_gphoto_command(command):
-    try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"Error running command: {command}")
-            print(f"Error output: {result.stderr}")
-            return False
-        return True
-    except Exception as e:
-        print(f"Exception running command: {str(e)}")
-        return False
-
 def set_camera_setting(setting_name, value):
-    command = f"gphoto2 --set-config {setting_name}={value}"
-    return run_gphoto_command(command)
-    
-def set_preview_settings():
-    """Configure camera for bright preview mode"""
     try:
-        command = (
-            "gphoto2 "
-            "--set-config aperture=3.5 "
-            "--set-config iso=4000"
-        )
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"Error setting preview mode: {result.stderr}")
-            return False
-        return True
+        config = gp.check_result(gp.gp_camera_get_config(camera))
+        setting = gp.check_result(gp.gp_widget_get_child_by_name(config, setting_name))
+        gp.check_result(gp.gp_widget_set_value(setting, value))
+        gp.check_result(gp.gp_camera_set_config(camera, config))
+        print(f"Successfully set camera setting {setting_name} to {value}")
+    except gp.GPhoto2Error as e:
+        print(f"Error setting camera setting {setting_name}: {str(e)}")
     except Exception as e:
-        print(f"Error in preview settings: {str(e)}")
-        return False
+        print(f"Unexpected error setting camera setting {setting_name}: {str(e)}")
 
-def set_photo_settings():
-    """Configure camera for flash photo mode"""
-    try:
-        command = (
-            "gphoto2 "
-            "--set-config aperture=8 "
-            "--set-config iso=320"
-        )
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"Error setting photo mode: {result.stderr}")
-            return False
-        return True
-    except Exception as e:
-        print(f"Error in photo settings: {str(e)}")
-        return False
+def set_camera_preview_settings():
+    print("Setting preview settings...")
+    set_camera_setting('aperture', '3.5')
+    set_camera_setting('iso', '4000')
 
-def enable_live_view():
-    """Enable camera's live view mode"""
+def set_camera_photo_settings():
+    print("Setting photo settings...")
+    set_camera_setting('aperture', '8')
+    set_camera_setting('iso', '320')
+
+def set_live_view_mode():
+    config = camera.get_config()
+    settings_to_adjust = {
+        'output': 'TFT',
+        'evfmode': 1,
+        'aperture': '3.5',
+        'iso': '4000'
+    }
+
+    for setting_name, desired_value in settings_to_adjust.items():
+        try:
+            setting = config.get_child_by_name(setting_name)
+            if setting:
+                current_value = setting.get_value()
+                print(f"Current {setting_name}: {current_value}")
+
+                if str(current_value) != str(desired_value):
+                    setting.set_value(desired_value)
+                    print(f"Setting {setting_name} to {desired_value}")
+                else:
+                    print(f"{setting_name} is already set to desired value: {desired_value}")
+            else:
+                print(f"Setting {setting_name} not found")
+        except gp.GPhoto2Error as e:
+            print(f"Error setting {setting_name}: {str(e)}")
+
     try:
-        command = (
-            "gphoto2 "
-            "--set-config output=TFT "
-            "--set-config evfmode=1"
-        )
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"Error enabling live view: {result.stderr}")
-            return False
+        camera.set_config(config)
+        print("Applied new settings to camera")
         return True
-    except Exception as e:
-        print(f"Error in live view: {str(e)}")
+    except gp.GPhoto2Error as e:
+        print(f"Error applying settings: {str(e)}")
         return False
 
 def initialize_camera():
-    print("Initializing camera...")
+    global camera
     try:
-        # Reset USB first
         os.system("sudo umount /dev/bus/usb/001/007")
-        
-        # Test camera connection
-        result = subprocess.run("gphoto2 --auto-detect", shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            print("Failed to detect camera")
-            return False
+        camera = gp.Camera()
+        camera.init()
+        print("Camera initialized successfully")
 
-        # Enable live view and set initial preview settings
-        if not enable_live_view():
-            print("Failed to enable live view")
-            return False
-            
-        if not set_preview_settings():
-            print("Failed to set preview settings")
-            return False
-            
-        print("Camera initialized successfully with live view")
-        return True
-    except Exception as e:
-        print(f"Error initializing camera: {str(e)}")
-        return False
+        if set_live_view_mode():
+            print("Live view mode enabled")
+            set_camera_preview_settings()
+            print("Preview settings applied")
+        else:
+            print("Failed to set live view mode")
+
+    except gp.GPhoto2Error as error:
+        print(f"Error initializing camera: {error}")
+        camera = None
 
 def take_photo():
-    global photo_in_progress
+    global photo_in_progress, camera
 
     with photo_lock:
         if photo_in_progress:
@@ -132,6 +114,11 @@ def take_photo():
 
     try:
         with camera_lock:
+            if camera is None:
+                initialize_camera()
+            if camera is None:
+                return None
+            
             if not os.path.exists(SAVE_DIRECTORY):
                 os.makedirs(SAVE_DIRECTORY)
                 
@@ -141,13 +128,13 @@ def take_photo():
             
             print('Taking a photo...')
             
-            # Configure for photo
+            # Use Python library for settings
             settings_start = time.time()
-            set_photo_settings()
+            set_camera_photo_settings()
             settings_end = time.time()
-            print(f"Photo settings configuration time: {settings_end - settings_start:.2f} seconds")
+            print(f"Settings configuration time: {settings_end - settings_start:.2f} seconds")
             
-            # Take the photo
+            # Use CLI for fast capture
             capture_start = time.time()
             command = (
                 f"gphoto2 --capture-image-and-download "
@@ -163,8 +150,8 @@ def take_photo():
             capture_end = time.time()
             print(f"Capture time: {capture_end - capture_start:.2f} seconds")
             
-            # Return to preview mode
-            set_preview_settings()
+            # Return to preview mode using Python library
+            set_camera_preview_settings()
             
             return filename
     except Exception as error:
@@ -175,17 +162,21 @@ def take_photo():
             photo_in_progress = False
 
 def reset_camera_connection():
+    global camera
     print("Resetting camera connection...")
-    # Quick reset instead of full process kill
-    subprocess.run("gphoto2 --reset", shell=True)
-    time.sleep(0.5)  # Reduced wait time
-    return initialize_camera()
+    
+    with camera_lock:
+        if camera:
+            camera.exit()
+            camera = None
+        time.sleep(0.5)
+        initialize_camera()
+    print("Camera connection reset complete")
 
 @app.route('/set-preview-settings')
 def set_preview_settings_route():
-    if set_preview_settings():
-        return "Preview settings applied successfully"
-    return "Failed to apply preview settings", 500
+    reset_camera_connection()
+    return "Preview settings and live view enabled"
 
 @app.route('/')
 def home():
