@@ -49,10 +49,16 @@ def set_camera_preview_settings():
     set_camera_setting('aperture', '3.5')
     set_camera_setting('iso', '4000')
 
-def set_camera_photo_taking_settings():
-    print("Setting photo taking settings...")
-    set_camera_setting('aperture', '8')
-    set_camera_setting('iso', '320')
+def configure_photo_settings():
+    """Configure camera settings optimized for photo capture"""
+    try:
+        # Combine settings into a single gphoto2 command for better performance
+        command = "gphoto2 --set-config aperture=8 --set-config iso=320"
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Error configuring photo settings: {result.stderr}")
+    except Exception as e:
+        print(f"An error occurred during photo configuration: {e}")
 
 def set_live_view_mode():
     settings = {
@@ -84,13 +90,6 @@ def initialize_camera():
         print(f"Error initializing camera: {str(e)}")
         return False
 
-def autofocus():
-    try:
-        print("Setting photo taking settings for focus...")
-        set_camera_photo_taking_settings()
-    except Exception as e:
-        print(f"An error occurred during autofocus: {e}")
-
 def take_photo():
     global photo_in_progress
 
@@ -109,14 +108,14 @@ def take_photo():
             full_path = os.path.join(SAVE_DIRECTORY, filename)
             
             print('Taking a photo...')
-            autofocus_start = time.time()
-            autofocus()
-            autofocus_end = time.time()
-            print(f"Autofocus time: {autofocus_end - autofocus_start:.2f} seconds")
+            settings_start = time.time()
+            configure_photo_settings()
+            settings_end = time.time()
+            print(f"Settings configuration time: {settings_end - settings_start:.2f} seconds")
             
             capture_start = time.time()
-            # Capture and download in one command for better performance
-            command = f"gphoto2 --capture-image-and-download --filename={full_path}"
+            # Combine capture settings and photo capture into a single command
+            command = f"gphoto2 --set-config aperture=8 --set-config iso=320 --capture-image-and-download --filename={full_path}"
             result = subprocess.run(command, shell=True, capture_output=True, text=True)
             
             if result.returncode != 0:
