@@ -23,6 +23,17 @@ auth_token = os.getenv("TWILIO_SECRET")
 twilio_phone_number = os.getenv("TWILIO_PHONE_NUMBER")
 twilio_client = TwilioClient(account_sid, auth_token)
 
+# Add color constants at the top of the file
+RED = '\033[91m'      # Bright red for errors
+GREEN = '\033[92m'    # Bright green for success
+YELLOW = '\033[93m'   # Bright yellow for warnings
+BLUE = '\033[94m'     # Bright blue for important info
+MAGENTA = '\033[95m'  # Bright magenta for print operations
+CYAN = '\033[96m'     # Bright cyan for important info
+GRAY = '\033[90m'     # Dim gray for less important info
+BOLD = '\033[1m'
+ENDC = '\033[0m'
+
 def get_supabase_client():
     return create_client(url, key)
 
@@ -79,6 +90,7 @@ def stripConstruction(stripId, photos, templateId, template, eventName, sessionI
     # Get photo offsets and zip them
     pixelOffsets = list(zip(templateInfo['x_pixel_offsets'], templateInfo['y_pixel_offsets']))
 
+    print(f"{BLUE}[STRIP] Creating photostrip for ID: {stripId}{ENDC}")
     photostrip = util.create_strip(template, photos, pixelOffsets, photoWidth, photoHeight)
 
     # Convert photostrip to jpeg with 80% quality
@@ -86,6 +98,7 @@ def stripConstruction(stripId, photos, templateId, template, eventName, sessionI
     success, stripFile = cv2.imencode(".jpg", photostrip, encode_params)
     
     executor.submit(upload_to_supabase, stripId, photos, eventName, sessionId, uuid, stripFile, fileName)
+    print(f"{GREEN}[STRIP] Photostrip created successfully{ENDC}")
     
     return {"code": 200, "msg": "Success", "data": stripFile}
 
@@ -93,7 +106,7 @@ def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, f
     supabase = get_supabase_client()
     errors_occurred = False  # Flag to track errors
     
-    print(f"[INFO] Uploading strip to supabase for stripId: {stripId}")
+    print(f"{GRAY}[UPLOAD] Starting upload for stripId: {stripId}{ENDC}")
     
     # Upload strip with retry logic
     max_retries = 3
@@ -105,29 +118,29 @@ def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, f
                 .from_('photos')
                 .upload(file=stripFile.tobytes(), path=f'strips/{eventName}/{fileName}', file_options={"content-type": "image/jpeg"})
             )
-            print(f"[SUCCESS] Strip uploaded to supabase for stripId: {stripId}")
+            print(f"{GRAY}[UPLOAD] Strip uploaded successfully{ENDC}")
             break
         except Exception as e:
             if attempt == max_retries - 1:
                 errors_occurred = True
-                print(f"[ERROR] Strip upload failure after {max_retries} attempts with error: {e}")
+                print(f"{RED}[ERROR] Strip upload failed after {max_retries} attempts: {e}{ENDC}")
                 return {"code": 400, "msg": f"Strip upload failed: {str(e)}"}
             else:
-                print(f"[WARN] Retry {attempt + 1} for strip {stripId}")
+                print(f"{YELLOW}[RETRY] Attempt {attempt + 1} for strip upload{ENDC}")
                 continue
 
     # Array for saving photo names to upload
     photo_names = []
-    print(f"[INFO] Uploading photos to supabase for stripId: {stripId}")
+    print(f"{GRAY}[UPLOAD] Processing individual photos...{ENDC}")
     
     # Upload individual photos with retry logic
     for count, photo in enumerate(photos):
         photo_name = f"{stripId}_{count}"
         photo_names.append(photo_name)
-        encode_params = [cv2.IMWRITE_JPEG_QUALITY, 90]  # 80% quality JPEG
+        encode_params = [cv2.IMWRITE_JPEG_QUALITY, 90]
         success, photoFile = cv2.imencode(".jpg", photo, encode_params)
         if not success:
-            print(f"[ERROR] Failed to encode photo {photo_name}")
+            print(f"{RED}[ERROR] Failed to encode photo {photo_name}{ENDC}")
             continue
         
         for attempt in range(max_retries):
@@ -135,16 +148,16 @@ def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, f
                 response = (
                     supabase.storage
                     .from_('photos')
-                    .upload(file=photoFile.tobytes(), path=f'raw/{eventName}/{photo_name}', file_options={"content-type": "image/jpeg"})  # Changed content-type to jpeg
+                    .upload(file=photoFile.tobytes(), path=f'raw/{eventName}/{photo_name}', file_options={"content-type": "image/jpeg"})
                 )
-                print(f"[SUCCESS] Photo {photo_name} uploaded to supabase for stripId: {stripId}")
+                print(f"{GRAY}[UPLOAD] Photo {count + 1} uploaded{ENDC}")
                 break
             except Exception as e:
                 if attempt == max_retries - 1:
                     errors_occurred = True
-                    print(f"[ERROR] Photo upload failure after {max_retries} attempts with error: {e}")
+                    print(f"{RED}[ERROR] Photo {count + 1} upload failed: {e}{ENDC}")
                 else:
-                    print(f"[WARN] Retry {attempt + 1} for photo {photo_name}")
+                    print(f"{YELLOW}[RETRY] Attempt {attempt + 1} for photo {count + 1}{ENDC}")
                     continue
 
     # Update database with retry logic
@@ -155,43 +168,39 @@ def upload_to_supabase(stripId, photos, eventName, sessionId, uuid, stripFile, f
                 .upsert({"uuid": uuid, "id": stripId, "session_id": sessionId, "image_url": fileName, "raw_photos": photo_names})
                 .execute()
             )
-            print(f"[SUCCESS] Database updated for stripId: {stripId}")
+            print(f"{GRAY}[UPLOAD] Database updated{ENDC}")
             break
         except Exception as e:
             if attempt == max_retries - 1:
                 errors_occurred = True
-                print(f"[ERROR] Failed to insert into photo strips after {max_retries} attempts with error: {e}")
+                print(f"{RED}[ERROR] Database update failed: {e}{ENDC}")
             else:
-                print(f"[WARN] Retry {attempt + 1} for database update of strip {stripId}")
+                print(f"{YELLOW}[RETRY] Attempt {attempt + 1} for database update{ENDC}")
                 continue
 
-    # When all is said and done, let's text the user that their photostrip is ready
+    # SMS notifications
     if not errors_occurred:
-        # Fetch phone numbers associated with the strip
         try:
             response = supabase.table("sms_notification").select("phone").eq("for_strip", stripId).execute()
             data = response.data
             if data and len(data) > 0:
-                print(f"[INFO] Sending SMS notifications for stripId: {stripId} to {len(data)} users")
+                print(f"{BLUE}[SMS] Sending notifications to {len(data)} recipients{ENDC}")
                 for entry in data:
                     phone_number = entry["phone"]
-                    print(f"[INFO] Sending SMS to {phone_number} from {twilio_phone_number}")
                     try:
-                        # ---------- Turning off until we are verified -----------
-                        # twilio_client.messages.create(
-                        #     body="Your photos are ready!",
-                        #     to=phone_number,
-                        #     from_=twilio_phone_number
-                        # )
-                        print(f"[SUCCESS] Message sent to {phone_number}")
+                        # SMS sending code commented out
+                        print(f"{GREEN}[SMS] Notification ready for {phone_number}{ENDC}")
                     except Exception as e:
-                        print(f"[ERROR] Error sending message to {phone_number}: {e}")
+                        print(f"{RED}[ERROR] SMS failed for {phone_number}: {e}{ENDC}")
             else:
-                print(f"[INFO] No phone numbers found for stripId: {stripId}")
+                print(f"{GRAY}[SMS] No notifications requested{ENDC}")
         except Exception as e:
-            print(f"[ERROR] Error fetching phone numbers: {e}")
+            print(f"{RED}[ERROR] SMS lookup failed: {e}{ENDC}")
     else:
-        print(f"[INFO] Skipping SMS notification due to earlier errors for stripId: {stripId}")
+        print(f"{YELLOW}[WARN] Skipping notifications due to upload errors{ENDC}")
+    
+    if not errors_occurred:
+        print(f"{GREEN}[SUCCESS] All operations completed for strip {stripId}{ENDC}")
     
     return {"code": 200, "msg": "Success"}
 
