@@ -164,31 +164,33 @@ def take_photo():
             
             # Configure settings for photo
             settings_start = time.time()
+            
+            # Get current config
+            config = camera.get_config()
+            
+            # Store current output mode
+            output = config.get_child_by_name('output')
+            original_output = output.get_value() if output else None
+            
+            # Temporarily disable live view for faster capture
+            if output:
+                output.set_value('Off')
+                camera.set_config(config)
+            
+            # Set photo settings
             set_camera_photo_settings()
             settings_time = time.time() - settings_start
             
             # Capture with optimized settings
             capture_start = time.time()
             try:
-                # Try to optimize capture speed
-                config = camera.get_config()
-                
                 # Ensure we're in RAM mode for speed
                 capturetarget = config.get_child_by_name('capturetarget')
                 if capturetarget:
                     capturetarget.set_value('Internal RAM')
                     camera.set_config(config)
                 
-                # Try to set capture speed priority
-                try:
-                    capturemode = config.get_child_by_name('capturemode')
-                    if capturemode:
-                        capturemode.set_value('Speed Priority')
-                        camera.set_config(config)
-                except:
-                    pass
-                
-                # Trigger capture with low-level call for speed
+                # Direct capture call
                 trigger_time_start = time.time()
                 file_path = gp.check_result(gp.gp_camera_capture(
                     camera, 
@@ -217,6 +219,15 @@ def take_photo():
             except gp.GPhoto2Error as error:
                 print(f"[ERROR] Capture failed: {error}")
                 return None
+            finally:
+                # Restore live view if it was enabled
+                if original_output:
+                    try:
+                        output.set_value(original_output)
+                        camera.set_config(config)
+                        set_live_view_mode()  # Re-enable full live view mode
+                    except:
+                        print("[WARN] Failed to restore live view mode")
                 
             total_time = time.time() - capture_start
             
@@ -226,9 +237,6 @@ def take_photo():
             print(f"  Trigger:   {trigger_time:.2f}s")
             print(f"  Download:  {download_time:.2f}s")
             print(f"  Total:     {total_time:.2f}s\n")
-            
-            # Return to preview mode
-            set_camera_preview_settings()
             
             return filename
     except Exception as error:
