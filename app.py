@@ -78,13 +78,19 @@ def initialize_camera():
         # Reset USB first
         os.system("sudo umount /dev/bus/usb/001/007")
         
-        # Test camera connection
-        result = subprocess.run("gphoto2 --auto-detect", shell=True, capture_output=True, text=True)
+        # Test camera connection and configure initial settings in one command
+        command = (
+            "gphoto2 --auto-detect "
+            "--set-config output=TFT "
+            "--set-config evfmode=1 "
+            "--set-config aperture=8 "  # Pre-configure photo settings
+            "--set-config iso=320"
+        )
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
         if result.returncode != 0:
-            print("Failed to detect camera")
+            print("Failed to detect camera or configure settings")
             return False
             
-        set_live_view_mode()
         return True
     except Exception as e:
         print(f"Error initializing camera: {str(e)}")
@@ -108,22 +114,24 @@ def take_photo():
             full_path = os.path.join(SAVE_DIRECTORY, filename)
             
             print('Taking a photo...')
-            settings_start = time.time()
-            configure_photo_settings()
-            settings_end = time.time()
-            print(f"Settings configuration time: {settings_end - settings_start:.2f} seconds")
-            
             capture_start = time.time()
-            # Combine capture settings and photo capture into a single command
-            command = f"gphoto2 --set-config aperture=8 --set-config iso=320 --capture-image-and-download --filename={full_path}"
+            # Optimized capture command with minimal flags and no redundant settings
+            command = (
+                f"gphoto2 --capture-image-and-download "
+                f"--force-overwrite "  # Avoid name collision checks
+                f"--filename={full_path}"
+            )
             result = subprocess.run(command, shell=True, capture_output=True, text=True)
             
             if result.returncode != 0:
                 print(f"Error taking photo: {result.stderr}")
+                # Quick recovery attempt without full reset
+                recovery_command = "gphoto2 --reset"
+                subprocess.run(recovery_command, shell=True)
                 return None
                 
             capture_end = time.time()
-            print(f"Capture time: {capture_end - capture_start:.2f} seconds")
+            print(f"Total capture time: {capture_end - capture_start:.2f} seconds")
             
             return filename
     except Exception as error:
@@ -135,9 +143,9 @@ def take_photo():
             
 def reset_camera_connection():
     print("Resetting camera connection...")
-    # Kill any existing gphoto2 processes
-    os.system("pkill -f gphoto2")
-    time.sleep(1)
+    # Quick reset instead of full process kill
+    subprocess.run("gphoto2 --reset", shell=True)
+    time.sleep(0.5)  # Reduced wait time
     return initialize_camera()
 
 @app.route('/set-preview-settings')
