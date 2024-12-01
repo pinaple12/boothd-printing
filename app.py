@@ -39,14 +39,11 @@ def set_camera_setting(setting_name, value):
         if str(current_value) != str(value):
             gp.check_result(gp.gp_widget_set_value(setting, value))
             gp.check_result(gp.gp_camera_set_config(camera, config))
-            print(f"Changed {setting_name} from {current_value} to {value}")
-        else:
-            print(f"Setting {setting_name} already at desired value: {value}")
             
     except gp.GPhoto2Error as e:
-        print(f"Error setting camera setting {setting_name}: {str(e)}")
+        print(f"⚠️  Setting '{setting_name}' failed: {str(e)}")
     except Exception as e:
-        print(f"Unexpected error setting camera setting {setting_name}: {str(e)}")
+        print(f"❌ Unexpected error with '{setting_name}': {str(e)}")
 
 def set_camera_preview_settings():
     print("Setting preview settings...")
@@ -95,43 +92,45 @@ def set_live_view_mode():
 def initialize_camera():
     global camera
     try:
+        print("\n🎥 Initializing camera...")
         os.system("sudo umount /dev/bus/usb/001/007")
         
-        # Initialize camera with proper syntax
         camera = gp.Camera()
         camera.init()
-        print("Camera initialized successfully")
         
-        # Pre-configure capture settings
+        # Pre-configure capture settings for speed
         config = camera.get_config()
         
-        # Try to optimize USB performance
+        # Try to optimize capture settings
         try:
-            usbspeed = config.get_child_by_name('usbspeed')
-            if usbspeed:
-                usbspeed.set_value('high')
-                camera.set_config(config)
-        except gp.GPhoto2Error:
-            pass  # Not all cameras support this
-            
-        # Try to set capture target
-        try:
+            # Set capture target to RAM
             capturetarget = config.get_child_by_name('capturetarget')
             if capturetarget:
-                capturetarget.set_value('Memory card')
+                capturetarget.set_value('Internal RAM')
                 camera.set_config(config)
+            
+            # Try to disable image review
+            reviewtime = config.get_child_by_name('reviewtime')
+            if reviewtime:
+                reviewtime.set_value(0)
+                camera.set_config(config)
+                
+            # Try to set fastest image quality
+            imageformat = config.get_child_by_name('imageformat')
+            if imageformat:
+                imageformat.set_value('Large Fine JPEG')
+                camera.set_config(config)
+                
         except gp.GPhoto2Error:
             pass
             
         if set_live_view_mode():
-            print("Live view mode enabled")
-            set_camera_preview_settings()
-            print("Preview settings applied")
+            print("✅ Camera ready")
         else:
-            print("Failed to set live view mode")
+            print("⚠️  Live view setup failed")
 
     except gp.GPhoto2Error as error:
-        print(f"Error initializing camera: {error}")
+        print(f"❌ Camera initialization failed: {error}")
         camera = None
 
 def take_photo():
@@ -152,28 +151,35 @@ def take_photo():
             if not os.path.exists(SAVE_DIRECTORY):
                 os.makedirs(SAVE_DIRECTORY)
             
-            print('Taking a photo...')
+            print('\n📸 Taking photo...')
             
             # Configure settings for photo
             settings_start = time.time()
             set_camera_photo_settings()
-            settings_end = time.time()
-            print(f"Settings configuration time: {settings_end - settings_start:.2f} seconds")
+            settings_time = time.time() - settings_start
             
             # Capture with optimized settings
             capture_start = time.time()
             try:
-                # Set capture target to memory card for potential speed improvement
+                # Pre-configure capture target to RAM for faster transfer
                 config = camera.get_config()
                 capturetarget = config.get_child_by_name('capturetarget')
                 if capturetarget:
-                    capturetarget.set_value('Memory card')
+                    capturetarget.set_value('Internal RAM')
                     camera.set_config(config)
                 
-                # Take the photo
-                file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
+                # Trigger capture
+                trigger_time_start = time.time()
+                file_path = camera.trigger_capture()
+                trigger_time = time.time() - trigger_time_start
                 
-                # Optimize file transfer
+                # Wait for event
+                wait_time_start = time.time()
+                event_type, event_data = camera.wait_for_event(5000)
+                wait_time = time.time() - wait_time_start
+                
+                # Get the file
+                download_time_start = time.time()
                 camera_file = camera.file_get(
                     file_path.folder, 
                     file_path.name, 
@@ -184,20 +190,28 @@ def take_photo():
                 filename = f"photo_{timestamp}.jpg"
                 full_path = os.path.join(SAVE_DIRECTORY, filename)
                 camera_file.save(full_path)
+                download_time = time.time() - download_time_start
                 
             except gp.GPhoto2Error as error:
-                print(f"Capture error: {error}")
+                print(f"❌ Capture error: {error}")
                 return None
                 
-            capture_end = time.time()
-            print(f"Capture time: {capture_end - capture_start:.2f} seconds")
+            total_time = time.time() - capture_start
+            
+            # Print timing summary
+            print("\n⏱️  Timing Summary:")
+            print(f"  Settings:  {settings_time:.2f}s")
+            print(f"  Trigger:   {trigger_time:.2f}s")
+            print(f"  Wait:      {wait_time:.2f}s")
+            print(f"  Download:  {download_time:.2f}s")
+            print(f"  Total:     {total_time:.2f}s\n")
             
             # Return to preview mode
             set_camera_preview_settings()
             
             return filename
     except Exception as error:
-        print(f"Error taking photo: {str(error)}")
+        print(f"❌ Error: {str(error)}")
         return None
     finally:
         with photo_lock:
