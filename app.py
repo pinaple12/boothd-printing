@@ -121,6 +121,15 @@ def initialize_camera():
                 imageformat.set_value('Large Fine JPEG')
                 camera.set_config(config)
                 
+            # Try to set capture speed priority
+            try:
+                capturemode = config.get_child_by_name('capturemode')
+                if capturemode:
+                    capturemode.set_value('Speed Priority')
+                    camera.set_config(config)
+            except:
+                pass
+                
         except gp.GPhoto2Error:
             pass
             
@@ -161,16 +170,31 @@ def take_photo():
             # Capture with optimized settings
             capture_start = time.time()
             try:
-                # Pre-configure capture target to RAM for faster transfer
+                # Try to optimize capture speed
                 config = camera.get_config()
+                
+                # Ensure we're in RAM mode for speed
                 capturetarget = config.get_child_by_name('capturetarget')
                 if capturetarget:
                     capturetarget.set_value('Internal RAM')
                     camera.set_config(config)
                 
-                # Trigger capture
+                # Try to set capture speed priority
+                try:
+                    capturemode = config.get_child_by_name('capturemode')
+                    if capturemode:
+                        capturemode.set_value('Speed Priority')
+                        camera.set_config(config)
+                except:
+                    pass
+                
+                # Trigger capture with low-level call for speed
                 trigger_time_start = time.time()
-                file_path = camera.capture(gp.GP_CAPTURE_IMAGE)
+                file_path = gp.check_result(gp.gp_camera_capture(
+                    camera, 
+                    gp.GP_CAPTURE_IMAGE, 
+                    gp.gp_context_new()
+                ))
                 if not file_path:
                     print("[ERROR] Capture failed - no file path returned")
                     return None
