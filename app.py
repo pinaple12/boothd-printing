@@ -31,16 +31,14 @@ photo_lock = threading.Lock()
 
 def set_camera_setting(setting_name, value):
     try:
-        # Use a new context for each setting change
-        context = gp.gp_context_new()
-        config = gp.check_result(gp.gp_camera_get_config(camera, context))
+        config = gp.check_result(gp.gp_camera_get_config(camera))
         setting = gp.check_result(gp.gp_widget_get_child_by_name(config, setting_name))
         
         # Only change if value is different
         current_value = setting.get_value()
         if str(current_value) != str(value):
             gp.check_result(gp.gp_widget_set_value(setting, value))
-            gp.check_result(gp.gp_camera_set_config(camera, config, context))
+            gp.check_result(gp.gp_camera_set_config(camera, config))
             print(f"Changed {setting_name} from {current_value} to {value}")
         else:
             print(f"Setting {setting_name} already at desired value: {value}")
@@ -99,12 +97,8 @@ def initialize_camera():
     try:
         os.system("sudo umount /dev/bus/usb/001/007")
         
-        # Create context with timeout setting
-        context = gp.Context()
-        camera = gp.Camera(context=context)
-        
-        # Initialize with USB speed optimization
-        camera.set_port_info(camera.get_port_info())
+        # Initialize camera with proper syntax
+        camera = gp.Camera()
         camera.init()
         print("Camera initialized successfully")
         
@@ -183,8 +177,7 @@ def take_photo():
                 camera_file = camera.file_get(
                     file_path.folder, 
                     file_path.name, 
-                    gp.GP_FILE_TYPE_NORMAL,
-                    context=gp.gp_context_new()  # New context for potential performance gain
+                    gp.GP_FILE_TYPE_NORMAL
                 )
                 
                 timestamp = int(time.time())
