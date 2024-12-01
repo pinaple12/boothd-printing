@@ -41,9 +41,9 @@ def set_camera_setting(setting_name, value):
             gp.check_result(gp.gp_camera_set_config(camera, config))
             
     except gp.GPhoto2Error as e:
-        print(f"[WARN] Setting '{setting_name}' failed: {str(e)}")
+        print(f"[WARN] Unable to set {setting_name}")
     except Exception as e:
-        print(f"[ERROR] Unexpected error with '{setting_name}': {str(e)}")
+        print(f"[ERROR] Failed to set {setting_name}")
 
 def set_camera_preview_settings():
     print("Setting preview settings...")
@@ -92,7 +92,15 @@ def set_live_view_mode():
 def initialize_camera():
     global camera
     try:
-        print("\n[INIT] Starting camera initialization...")
+        print("""
+██████╗  ██████╗  ██████╗ ████████╗██╗  ██╗██╗██████╗ 
+██╔══██╗██╔═══██╗██╔═══██╗╚══██╔══╝██║  ██║██║██╔══██╗
+██████╔╝██║   ██║██║   ██║   ██║   ███████║██║██║  ██║
+██╔══██╗██║   ██║██║   ██║   ██║   ██╔══██║██║██║  ██║
+██████╔╝╚██████╔╝╚██████╔╝   ██║   ██║  ██║██║██████╔╝
+╚═════╝  ╚═════╝  ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚═╝╚═════╝ 
+        """)
+        print("\nInitializing camera...")
         os.system("sudo umount /dev/bus/usb/001/007")
         
         camera = gp.Camera()
@@ -121,22 +129,13 @@ def initialize_camera():
                 imageformat.set_value('Large Fine JPEG')
                 camera.set_config(config)
                 
-            # Try to set capture speed priority
-            try:
-                capturemode = config.get_child_by_name('capturemode')
-                if capturemode:
-                    capturemode.set_value('Speed Priority')
-                    camera.set_config(config)
-            except:
-                pass
-                
         except gp.GPhoto2Error:
             pass
             
         if set_live_view_mode():
-            print("[INIT] Camera ready")
+            print("Camera ready")
         else:
-            print("[WARN] Live view setup failed")
+            print("[WARN] Live view initialization failed")
 
     except gp.GPhoto2Error as error:
         print(f"[ERROR] Camera initialization failed: {error}")
@@ -159,8 +158,6 @@ def take_photo():
             
             if not os.path.exists(SAVE_DIRECTORY):
                 os.makedirs(SAVE_DIRECTORY)
-            
-            print('\n[PHOTO] Starting capture process...')
             
             # Configure settings for photo
             settings_start = time.time()
@@ -198,7 +195,7 @@ def take_photo():
                     gp.gp_context_new()
                 ))
                 if not file_path:
-                    print("[ERROR] Capture failed - no file path returned")
+                    print("[ERROR] Photo capture failed")
                     return None
                 trigger_time = time.time() - trigger_time_start
                 
@@ -225,18 +222,20 @@ def take_photo():
                     try:
                         output.set_value(original_output)
                         camera.set_config(config)
-                        set_live_view_mode()  # Re-enable full live view mode
+                        set_live_view_mode()
                     except:
-                        print("[WARN] Failed to restore live view mode")
+                        print("[WARN] Failed to restore live view")
                 
             total_time = time.time() - capture_start
             
             # Print timing summary
-            print("\n[TIMING]")
-            print(f"  Settings:  {settings_time:.2f}s")
-            print(f"  Trigger:   {trigger_time:.2f}s")
-            print(f"  Download:  {download_time:.2f}s")
-            print(f"  Total:     {total_time:.2f}s\n")
+            print("-" * 40)
+            print("Capture Complete")
+            print(f"Settings:  {settings_time:.2f}s")
+            print(f"Trigger:   {trigger_time:.2f}s")
+            print(f"Download:  {download_time:.2f}s")
+            print(f"Total:     {total_time:.2f}s")
+            print("-" * 40)
             
             return filename
     except Exception as error:
