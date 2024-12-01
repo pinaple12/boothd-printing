@@ -421,7 +421,7 @@ def background_process(stripId, images, templateId, eventName, sessionId, copies
         # Submit the print job
         print(f"[INFO] Sending strip to print for stripId: {stripId}")
         job_id = print_image(strip, "2x6*2", copies)
-        print(f"[SUCCESS] Print job submitted with job_id: {job_id}")
+        print(f"{GREEN}[SUCCESS] Print job submitted with job_id: {job_id}{ENDC}")
     except Exception as e:
         print(f"[ERROR] Printing failed for stripId: {stripId} - {str(e)}")
 
