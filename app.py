@@ -435,7 +435,7 @@ def print_photobooth():
     # Retrieve photobooth ID and copies
     photoBoothId = request.form.get('photoboothId')
     copies = request.form.get('copies', 1)
-    print(f"[INFO] Received photoboothId: {photoBoothId}")
+    print(f"[INFO] Received request for {copies} copies")
 
     # Fetch template information
     templateId, eventName, sessionId = util.findTemplate(photoBoothId)
