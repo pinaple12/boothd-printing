@@ -29,7 +29,18 @@ camera_lock = threading.Lock()
 photo_in_progress = False
 photo_lock = threading.Lock()
 
+# Add color constants at the top of the file
+RED = '\033[91m'
+GREEN = '\033[92m'
+YELLOW = '\033[93m'
+BLUE = '\033[94m'
+MAGENTA = '\033[95m'
+CYAN = '\033[96m'
+BOLD = '\033[1m'
+ENDC = '\033[0m'
+
 # Print banner immediately at import time
+print(f"{CYAN}{BOLD}")
 print("""
 ██████╗  ██████╗  ██████╗ ████████╗██╗  ██╗╗██████╗ 
 ██╔══██╗██╔═══██╗██╔═══██╗╚══██╔══╝██║  ██║██╔══██╗
@@ -38,6 +49,7 @@ print("""
 ██████╔╝╚██████╔╝╚██████╔╝   ██║   ██║  ██║██████╔╝
 ╚═════╝  ╚═════╝  ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚═════╝ 
 """)
+print(ENDC)
 
 def set_camera_setting(setting_name, value):
     try:
@@ -92,7 +104,7 @@ def set_live_view_mode():
 def initialize_camera():
     global camera
     try:
-        print("\nInitializing camera...")
+        print(f"\n{BLUE}Initializing camera...{ENDC}")
         os.system("sudo umount /dev/bus/usb/001/007 2>/dev/null")
         
         camera = gp.Camera()
@@ -125,12 +137,12 @@ def initialize_camera():
             pass
             
         if set_live_view_mode():
-            print("Camera ready")
+            print(f"{GREEN}Camera ready{ENDC}")
         else:
-            print("[WARN] Live view initialization failed")
+            print(f"{YELLOW}[WARN] Live view initialization failed{ENDC}")
 
     except gp.GPhoto2Error as error:
-        print(f"[ERROR] Camera initialization failed: {error}")
+        print(f"{RED}[ERROR] Camera initialization failed: {error}{ENDC}")
         camera = None
 
 def take_photo():
@@ -187,7 +199,7 @@ def take_photo():
                     gp.gp_context_new()
                 ))
                 if not file_path:
-                    print("[ERROR] Photo capture failed")
+                    print(f"{RED}[ERROR] Photo capture failed{ENDC}")
                     return None
                 trigger_time = time.time() - trigger_time_start
                 
@@ -206,7 +218,7 @@ def take_photo():
                 download_time = time.time() - download_time_start
                 
             except gp.GPhoto2Error as error:
-                print(f"[ERROR] Capture failed: {error}")
+                print(f"{RED}[ERROR] Capture failed: {error}{ENDC}")
                 return None
             finally:
                 # Restore live view if it was enabled
@@ -216,22 +228,22 @@ def take_photo():
                         camera.set_config(config)
                         set_live_view_mode()
                     except:
-                        print("[WARN] Failed to restore live view")
+                        print(f"{YELLOW}[WARN] Failed to restore live view{ENDC}")
                 
             total_time = time.time() - capture_start
             
             # Print timing summary
+            print(f"\n{GREEN}{BOLD}Capture Complete{ENDC}")
             print("-" * 40)
-            print("Capture Complete")
             print(f"Settings:  {settings_time:.2f}s")
             print(f"Trigger:   {trigger_time:.2f}s")
             print(f"Download:  {download_time:.2f}s")
-            print(f"Total:     {total_time:.2f}s")
+            print(f"{BOLD}Total:     {total_time:.2f}s{ENDC}")
             print("-" * 40)
             
             return filename
     except Exception as error:
-        print(f"[ERROR] {str(error)}")
+        print(f"{RED}[ERROR] {str(error)}{ENDC}")
         return None
     finally:
         with photo_lock:
@@ -421,21 +433,21 @@ global_template_lock = Lock()
 
 @app.route('/print_photobooth', methods=['POST'])
 def print_photobooth():
-    print("[INFO] Received request to print photobooth strip")
-
+    print(f"\n{MAGENTA}[PRINT] Processing print request{ENDC}")
+    
     # Initialize response in case of early errors
     response = jsonify({'error': 'Unexpected error occurred'}), 500
 
     # Process uploaded images
     images, error = util.process_uploaded_images(request)
     if error:
-        print(f"[ERROR] Image processing failed: {error}")
+        print(f"{RED}[ERROR] Image processing failed: {error}{ENDC}")
         return jsonify({'error': error}), 400
 
     # Retrieve photobooth ID and copies
     photoBoothId = request.form.get('photoboothId')
     copies = request.form.get('copies', 1)
-    print(f"[INFO] Received request for {copies} copies")
+    print(f"{CYAN}[INFO] Print request - ID: {photoBoothId}, Copies: {copies}{ENDC}")
 
     # Fetch template information
     templateId, eventName, sessionId = util.findTemplate(photoBoothId)
