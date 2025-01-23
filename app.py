@@ -21,7 +21,7 @@ global_template_lock = Lock()
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 SAVE_DIRECTORY = os.path.expanduser("~/photobooth_flask_app")
-global_template = None
+template_cache = {}  # Dictionary to store multiple templates
 
 # Global variables
 camera = None
@@ -316,15 +316,15 @@ def stripCreation():
         return "stripId and templateId must be integers", 400
     
         #if this is the first load, save it in
-    if global_template is None:
+    if template_cache.get(templateId) is None:
         resp = fetchTemplate(templateId)
         if resp["code"] != 200:
             return "Error in template retrieval from supabase", 400
         else:
-            global_template = resp["data"]
+            template_cache[templateId] = resp["data"]
 
 
-    resp = stripConstruction(stripId, global_template, eventName)
+    resp = stripConstruction(stripId, template_cache[templateId], eventName)
 
     if 'msg' not in resp or 'code' not in resp:
         return "Internal error: Invalid response from stripConstruction", 500
@@ -405,7 +405,7 @@ def background_process(stripId, images, templateId, eventName, sessionId, copies
 
     # Construct the photobooth strip
     print(f"[INFO] Constructing photobooth strip for event: {eventName}, session: {sessionId}")
-    constructionResponse = stripConstruction(stripId, images, templateId, global_template, eventName, sessionId, uuid)
+    constructionResponse = stripConstruction(stripId, images, templateId, template_cache[templateId], eventName, sessionId, uuid)
 
     if constructionResponse["code"] == 400:
         print(f"[ERROR] Strip construction failed: {constructionResponse['msg']}")
@@ -449,7 +449,6 @@ def print_photobooth():
 
     # Check if there is a forced template that has been passed through
     forcedTemplate = request.form.get('template')
-
     copies = request.form.get('copies', 1)
     print(f"{CYAN}[INFO] Print request - ID: {photoBoothId}, Copies: {copies}{ENDC}")
 
@@ -458,18 +457,24 @@ def print_photobooth():
 
     if forcedTemplate:
         templateId = forcedTemplate
-
-    # Check and assign global_template with a lock
-    global global_template
-    with global_template_lock:
-        if global_template is None:
+        # If forcing a template, always fetch it fresh to ensure we have the latest version
+        with global_template_lock:
             resp = fetchTemplate(templateId)
             if resp["code"] != 200:
                 print(f"[ERROR] Template retrieval failed: {resp['msg']}")
                 return jsonify({'error': "Error in template retrieval from Supabase"}), 400
-            global_template = resp["data"]
+            template_cache[templateId] = resp["data"]
+    else:
+        # Check and assign template_cache with a lock
+        with global_template_lock:
+            if template_cache.get(templateId) is None:
+                resp = fetchTemplate(templateId)
+                if resp["code"] != 200:
+                    print(f"[ERROR] Template retrieval failed: {resp['msg']}")
+                    return jsonify({'error': "Error in template retrieval from Supabase"}), 400
+                template_cache[templateId] = resp["data"]
 
-    print(f"[INFO] Global template is none?: {global_template is None}")
+    print(f"[INFO] Template cache has template?: {template_cache.get(templateId) is not None}")
     
     # Generate strip ID and UUID
     stripId, uuid = util.generateStripId(sessionId)
