@@ -446,12 +446,19 @@ def print_photobooth():
 
     # Retrieve photobooth ID and copies
     photoBoothId = request.form.get('photoboothId')
+
+    # Check if there is a forced template that has been passed through
+    forcedTemplate = request.form.get('template')
+
     copies = request.form.get('copies', 1)
     print(f"{CYAN}[INFO] Print request - ID: {photoBoothId}, Copies: {copies}{ENDC}")
 
     # Fetch template information
     templateId, eventName, sessionId = util.findTemplate(photoBoothId)
-    
+
+    if forcedTemplate:
+        templateId = forcedTemplate
+
     # Check and assign global_template with a lock
     global global_template
     with global_template_lock:
